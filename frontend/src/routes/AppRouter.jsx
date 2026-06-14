@@ -1,0 +1,61 @@
+import { Navigate, Route, Routes } from 'react-router-dom'
+
+import { useAuth } from '../context/AuthContext.jsx'
+import ProtectedRoute from '../components/layout/ProtectedRoute.jsx'
+import LoginPage from '../pages/auth/LoginPage.jsx'
+import { AdminDashboardView, EmailModuleView, MeetingWorkspaceView, PerformanceBroadcasterView, PortalManagementView, TeacherDashboardView, WhatsAppAlertsView, StudentHomeView, StudentProgressView, StudentResultHistoryView, NoticeBoardView, OpportunityBoardView, SettingsView } from '../pages/views.jsx'
+
+function RoleRedirect() {
+  const { user } = useAuth()
+  if (!user) return <Navigate to="/login" replace />
+  const nextPath =
+    user.role === 'admin'
+      ? '/admin/dashboard'
+      : user.role === 'teacher'
+        ? '/teacher/dashboard'
+        : user.role === 'student'
+          ? '/student/home'
+          : '/parent/home'
+  return <Navigate to={nextPath} replace />
+}
+
+export default function AppRouter() {
+  return (
+    <Routes>
+      <Route path="/" element={<RoleRedirect />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+      <Route path="/teacher" element={<Navigate to="/teacher/dashboard" replace />} />
+      <Route path="/student" element={<Navigate to="/student/home" replace />} />
+      <Route path="/parent" element={<Navigate to="/parent/home" replace />} />
+
+      <Route path="/admin/dashboard" element={<ProtectedRoute roles={[ 'admin' ]}><AdminDashboardView /></ProtectedRoute>} />
+      <Route path="/admin/meetings" element={<ProtectedRoute roles={[ 'admin' ]}><MeetingWorkspaceView canCreateMeeting /></ProtectedRoute>} />
+      <Route path="/admin/email" element={<ProtectedRoute roles={[ 'admin' ]}><EmailModuleView /></ProtectedRoute>} />
+      <Route path="/admin/results" element={<ProtectedRoute roles={[ 'admin' ]}><PerformanceBroadcasterView /></ProtectedRoute>} />
+      <Route path="/admin/whatsapp" element={<ProtectedRoute roles={[ 'admin' ]}><WhatsAppAlertsView /></ProtectedRoute>} />
+      <Route path="/admin/portal" element={<ProtectedRoute roles={[ 'admin' ]}><PortalManagementView /></ProtectedRoute>} />
+
+      <Route path="/teacher/dashboard" element={<ProtectedRoute roles={[ 'teacher' ]}><TeacherDashboardView /></ProtectedRoute>} />
+      <Route path="/teacher/meetings" element={<ProtectedRoute roles={[ 'teacher' ]}><MeetingWorkspaceView canCreateMeeting /></ProtectedRoute>} />
+      <Route path="/teacher/results" element={<ProtectedRoute roles={[ 'teacher' ]}><PerformanceBroadcasterView /></ProtectedRoute>} />
+      <Route path="/teacher/broadcast" element={<ProtectedRoute roles={[ 'teacher' ]}><PerformanceBroadcasterView /></ProtectedRoute>} />
+
+      <Route path="/student/home" element={<ProtectedRoute roles={[ 'student' ]}><StudentHomeView /></ProtectedRoute>} />
+      <Route path="/student/progress" element={<ProtectedRoute roles={[ 'student' ]}><StudentProgressView /></ProtectedRoute>} />
+      <Route path="/student/results" element={<ProtectedRoute roles={[ 'student' ]}><StudentResultHistoryView /></ProtectedRoute>} />
+      <Route path="/student/notices" element={<ProtectedRoute roles={[ 'student' ]}><NoticeBoardView /></ProtectedRoute>} />
+      <Route path="/student/opportunities" element={<ProtectedRoute roles={[ 'student' ]}><OpportunityBoardView /></ProtectedRoute>} />
+      <Route path="/student/settings" element={<ProtectedRoute roles={[ 'student' ]}><SettingsView /></ProtectedRoute>} />
+
+      <Route path="/parent/home" element={<ProtectedRoute roles={[ 'parent' ]}><StudentHomeView titlePrefix="Aisha's " /></ProtectedRoute>} />
+      <Route path="/parent/progress" element={<ProtectedRoute roles={[ 'parent' ]}><StudentProgressView titlePrefix="Aisha's " /></ProtectedRoute>} />
+      <Route path="/parent/results" element={<ProtectedRoute roles={[ 'parent' ]}><StudentResultHistoryView titlePrefix="Aisha's " /></ProtectedRoute>} />
+      <Route path="/parent/notices" element={<ProtectedRoute roles={[ 'parent' ]}><NoticeBoardView titlePrefix="Aisha's " /></ProtectedRoute>} />
+      <Route path="/parent/opportunities" element={<ProtectedRoute roles={[ 'parent' ]}><OpportunityBoardView titlePrefix="Aisha's " /></ProtectedRoute>} />
+      <Route path="/parent/settings" element={<ProtectedRoute roles={[ 'parent' ]}><SettingsView titlePrefix="Aisha's " /></ProtectedRoute>} />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
