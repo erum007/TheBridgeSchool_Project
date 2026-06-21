@@ -55,14 +55,14 @@ class WhatsAppStatus(str, Enum):
 meeting_attendees = Table(
     'meeting_attendees',
     Base.metadata,
-    Column('meeting_id', ForeignKey('meetings.id'), primary_key=True),
-    Column('user_id', ForeignKey('users.id'), primary_key=True),
+    Column('meeting_id', ForeignKey('meetings.id', ondelete='CASCADE'), primary_key=True),
+    Column('user_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
 )
 
 
 parent_student_links = Table(
     'parent_student_links',
     Base.metadata,
-    Column('parent_id', ForeignKey('users.id'), primary_key=True),
-    Column('student_id', ForeignKey('users.id'), primary_key=True),
+    Column('parent_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+    Column('student_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
 )

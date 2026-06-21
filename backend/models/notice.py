@@ -18,7 +18,7 @@ class Notice(Base):
     recipients = Column(SQLEnum(NoticeRecipients), nullable=False, default=NoticeRecipients.all)
     status = Column(SQLEnum(NoticeStatus), nullable=False, default=NoticeStatus.draft)
     publish_date = Column(Date, nullable=True)
-    created_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_by = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     created_by_user = relationship('User', back_populates='notices_created', foreign_keys=[created_by])

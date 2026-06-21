@@ -26,12 +26,24 @@ class Settings:
     twilio_auth_token: str = os.getenv('TWILIO_AUTH_TOKEN', '')
     twilio_whatsapp_number: str = os.getenv('TWILIO_WHATSAPP_NUMBER', '')
     gemini_api_key: str = os.getenv('GEMINI_API_KEY', '')
+    db_ssl_ca: str = os.getenv('DB_SSL_CA', '')
 
     @property
     def sqlalchemy_url(self) -> str:
-        if self.db_password:
-            return f'mysql+pymysql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4'
-        return f'mysql+pymysql://{self.db_user}@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4'
+        from urllib.parse import quote_plus
+        
+        user_part = quote_plus(self.db_user)
+        pass_part = f":{quote_plus(self.db_password)}" if self.db_password else ""
+        
+        base_url = f"mysql+pymysql://{user_part}{pass_part}@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4"
+        if self.db_ssl_ca:
+            ca_path = Path(self.db_ssl_ca)
+            if not ca_path.is_absolute():
+                resolved_path = Path(__file__).parent / ca_path
+                if resolved_path.exists():
+                    ca_path = resolved_path
+            base_url += f"&ssl_ca={ca_path.as_posix()}"
+        return base_url
 
 
 settings = Settings()
