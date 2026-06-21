@@ -15,7 +15,7 @@ class EmailTemplate(Base):
     name = Column(String(120), nullable=False)
     subject = Column(String(255), nullable=False)
     body = Column(Text, nullable=False)
-    created_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_by = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     created_by_user = relationship('User', back_populates='email_templates_created', foreign_keys=[created_by])

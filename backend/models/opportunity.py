@@ -16,7 +16,7 @@ class Opportunity(Base):
     eligibility = Column(String(255), nullable=False)
     deadline = Column(Date, nullable=True)
     link = Column(String(500), nullable=True)
-    created_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_by = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     created_by_user = relationship('User', back_populates='opportunities_created', foreign_keys=[created_by])

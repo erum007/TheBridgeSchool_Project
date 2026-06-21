@@ -13,9 +13,9 @@ class ActionItem(Base):
     __tablename__ = 'action_items'
 
     id = Column(Integer, primary_key=True, index=True)
-    meeting_id = Column(Integer, ForeignKey('meetings.id'), nullable=False)
+    meeting_id = Column(Integer, ForeignKey('meetings.id', ondelete='CASCADE'), nullable=False)
     description = Column(String(500), nullable=False)
-    assigned_to = Column(Integer, ForeignKey('users.id'), nullable=False)
+    assigned_to = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     status = Column(SQLEnum(ActionItemStatus), nullable=False, default=ActionItemStatus.todo)
     due_date = Column(Date, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

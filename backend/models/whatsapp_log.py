@@ -18,6 +18,6 @@ class WhatsAppLog(Base):
     message = Column(Text, nullable=False)
     status = Column(SQLEnum(WhatsAppStatus), nullable=False, default=WhatsAppStatus.sent)
     sent_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    sent_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    sent_by = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
 
     sent_by_user = relationship('User', back_populates='whatsapp_logs_sent', foreign_keys=[sent_by])

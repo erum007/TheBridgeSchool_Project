@@ -19,7 +19,7 @@ class Meeting(Base):
     status = Column(SQLEnum(MeetingStatus), nullable=False, default=MeetingStatus.upcoming)
     notes = Column(Text, nullable=True)
     ai_summary = Column(Text, nullable=True)
-    created_by = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_by = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     created_by_user = relationship('User', back_populates='created_meetings', foreign_keys=[created_by])
