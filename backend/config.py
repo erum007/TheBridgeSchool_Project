@@ -26,6 +26,7 @@ class Settings:
     twilio_auth_token: str = os.getenv('TWILIO_AUTH_TOKEN', '')
     twilio_whatsapp_number: str = os.getenv('TWILIO_WHATSAPP_NUMBER', '')
     gemini_api_key: str = os.getenv('GEMINI_API_KEY', '')
+    gemini_model: str = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
     db_ssl_ca: str = os.getenv('DB_SSL_CA', '')
 
     @property
