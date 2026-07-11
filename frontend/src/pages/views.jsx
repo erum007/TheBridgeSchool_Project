@@ -5,7 +5,7 @@ import {
   CalendarDays,
   ChartColumnBig,
   CirclePlus,
-  FileDown,
+  Download,
   FileText,
   Megaphone,
   Send,
@@ -16,6 +16,7 @@ import {
   WifiOff,
   WandSparkles,
   BriefcaseBusiness,
+  Trash2,
 } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { toast } from 'react-hot-toast'
@@ -265,7 +266,7 @@ export function EmailModuleView() {
   const { data: emails = [], loading: emailsLoading, refetch: refetchEmails } = useApi(() => emailsApi.list(), [])
   const { data: templates = [], refetch: refetchTemplates } = useApi(() => emailsApi.templates(), [])
   const [tab, setTab] = useState('dashboard')
-  const [compose, setCompose] = useState({ recipient_group: 'parents', template_id: '', subject: '', body: '', scheduled_at: '' })
+  const [compose, setCompose] = useState({ recipient_group: 'parents', individual_email: '', template_id: '', subject: '', body: '', scheduled_at: '' })
   const [templateForm, setTemplateForm] = useState({ name: '', subject: '', body: '' })
 
   const draftEmails = emails.filter((item) => item.status === 'draft')
@@ -281,15 +282,23 @@ export function EmailModuleView() {
 
   const submitCompose = async (event) => {
     event.preventDefault()
+    if (compose.recipient_group === 'individual' && !compose.individual_email) {
+      toast.error('Please enter an email address')
+      return
+    }
     try {
-      const payload = { ...compose, template_id: compose.template_id || null }
+      const payload = {
+        ...compose,
+        recipient_group: compose.recipient_group === 'individual' ? compose.individual_email : compose.recipient_group,
+        template_id: compose.template_id || null,
+      }
       if (compose.scheduled_at) {
         await emailsApi.schedule(payload)
       } else {
         await emailsApi.send(payload)
       }
       toast.success('Email saved')
-      setCompose({ recipient_group: 'parents', template_id: '', subject: '', body: '', scheduled_at: '' })
+      setCompose({ recipient_group: 'parents', individual_email: '', template_id: '', subject: '', body: '', scheduled_at: '' })
       refetchEmails()
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not save email')
@@ -367,7 +376,19 @@ export function EmailModuleView() {
                     <option value="students">Students</option>
                     <option value="teachers">Teachers</option>
                     <option value="all">All</option>
+                    <option value="individual">Individual email address</option>
                   </select>
+                  {compose.recipient_group === 'individual' && (
+                    <div className="mt-2">
+                      <input
+                        type="email"
+                        placeholder="Enter email address"
+                        value={compose.individual_email || ''}
+                        onChange={(event) => setCompose({ ...compose, individual_email: event.target.value })}
+                        className="w-full border border-[var(--border-default)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-primary)] bg-white placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-navy)] focus:ring-2 focus:ring-[var(--brand-navy)]/10 transition-colors duration-150"
+                      />
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="portal-label block">Template</label>
@@ -437,6 +458,11 @@ export function PerformanceBroadcasterView() {
   const { user } = useAuth()
   const { data: results = [], refetch } = useApi(() => resultsApi.list(), [])
   const [form, setForm] = useState({ subject: '', class_name: '', notify: true, file: null })
+  const [pendingDeleteBatchId, setPendingDeleteBatchId] = useState(null)
+  const [previewRows, setPreviewRows] = useState([])
+  const [fileZoneVersion, setFileZoneVersion] = useState(0)
+  const [filterSubject, setFilterSubject] = useState('')
+  const [filterTerm, setFilterTerm] = useState('')
 
   const uploads = useMemo(() => {
     const groups = new Map()
@@ -447,6 +473,97 @@ export function PerformanceBroadcasterView() {
     })
     return Array.from(groups.entries()).map(([batchId, batchResults]) => ({ batchId, batchResults }))
   }, [results])
+
+  const uniqueSubjects = [...new Set(results.map((result) => result.subject).filter(Boolean))]
+  const uniqueTerms = [...new Set(results.map((result) => result.term).filter(Boolean))]
+
+  const filteredUploads = uploads.filter((group) => {
+    const firstResult = group.batchResults[0]
+    if (filterSubject && firstResult?.subject !== filterSubject) return false
+    if (filterTerm && firstResult?.term !== filterTerm) return false
+    return true
+  })
+
+  const clearSelectedFile = () => {
+    setForm({ ...form, file: null })
+    setPreviewRows([])
+    setFileZoneVersion((value) => value + 1)
+  }
+
+  const handleFileSelect = (file) => {
+    if (!file) {
+      clearSelectedFile()
+      return
+    }
+
+    setForm({ ...form, file })
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setPreviewRows([])
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const text = String(event.target?.result || '')
+      const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+      if (!lines.length) {
+        setPreviewRows([])
+        return
+      }
+      const headers = lines[0].split(',').map((header) => header.trim())
+      const rows = lines.slice(1).map((line) => {
+        const values = line.split(',')
+        return headers.reduce((accumulator, header, index) => {
+          accumulator[header] = (values[index] ?? '').trim()
+          return accumulator
+        }, {})
+      })
+      setPreviewRows(rows)
+    }
+    reader.onerror = () => setPreviewRows([])
+    reader.readAsText(file)
+  }
+
+  const downloadBatch = async (batchId) => {
+    try {
+      const response = await resultsApi.downloadBatch(batchId)
+      const url = URL.createObjectURL(new Blob([response.data]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `results_${batchId}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not download batch')
+    }
+  }
+
+  const confirmDeleteBatch = async (batchId) => {
+    try {
+      await resultsApi.deleteBatch(batchId)
+      toast.success('Batch deleted')
+      setPendingDeleteBatchId(null)
+      refetch()
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not delete batch')
+    }
+  }
+
+  const downloadSampleTemplate = () => {
+    const sample = [
+      'student_name,student_email,subject,grade,class_average,attendance,term',
+      'Ali Hassan,ali.hassan@example.com,Mathematics,85,78,92,Term 1 2026',
+      'Sara Ahmed,sara.ahmed@example.com,Science,79,74,88,Term 1 2026',
+    ].join('\n')
+    const blob = new Blob([sample], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'results_template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const submit = async (event) => {
     event.preventDefault()
@@ -460,9 +577,14 @@ export function PerformanceBroadcasterView() {
     payload.append('class_name', form.class_name)
     payload.append('notify', form.notify ? 'true' : 'false')
     try {
-      await resultsApi.upload(payload)
-      toast.success('Results uploaded')
+      const result = await resultsApi.upload(payload)
+      const emailMsg = form.notify && result.data.emails_sent !== undefined
+        ? ` — ${result.data.emails_sent} email${result.data.emails_sent !== 1 ? 's' : ''} sent`
+        : ''
+      toast.success(`Results uploaded${emailMsg}`)
       setForm({ subject: '', class_name: '', notify: true, file: null })
+      setPreviewRows([])
+      setFileZoneVersion((value) => value + 1)
       refetch()
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not upload results')
@@ -482,7 +604,53 @@ export function PerformanceBroadcasterView() {
             <label className="portal-label block">Class</label>
             <input className="portal-input mt-1" value={form.class_name} onChange={(event) => setForm({ ...form, class_name: event.target.value })} />
           </div>
-          <FileUploadZone accept=".csv,.xlsx" label="Upload result sheet" onFileSelect={(file) => setForm({ ...form, file })} />
+          <FileUploadZone key={fileZoneVersion} accept=".csv,.xlsx" label="Upload result sheet" onFileSelect={handleFileSelect} />
+          {form.file ? (
+            <div className="flex items-center justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-app)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+              <span className="truncate pr-3">Selected file: {form.file.name}</span>
+              <button type="button" className="portal-button-ghost h-7 px-2 text-xs text-[var(--brand-red)] hover:bg-[var(--brand-red-light)] hover:text-[var(--brand-red-dark)]" onClick={clearSelectedFile}>
+                Remove
+              </button>
+            </div>
+          ) : null}
+          {previewRows.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
+                Preview — {previewRows.length} student{previewRows.length !== 1 ? 's' : ''} detected
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-[var(--border-default)]">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-[var(--border-default)] bg-[var(--bg-app)]">
+                      <th className="px-3 py-2 text-left font-medium uppercase tracking-wide text-[var(--text-muted)]">Student</th>
+                      <th className="px-3 py-2 text-left font-medium uppercase tracking-wide text-[var(--text-muted)]">Subject</th>
+                      <th className="px-3 py-2 text-right font-medium uppercase tracking-wide text-[var(--text-muted)]">Grade</th>
+                      <th className="px-3 py-2 text-right font-medium uppercase tracking-wide text-[var(--text-muted)]">Avg</th>
+                      <th className="px-3 py-2 text-right font-medium uppercase tracking-wide text-[var(--text-muted)]">Att %</th>
+                      <th className="px-3 py-2 text-left font-medium uppercase tracking-wide text-[var(--text-muted)]">Term</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.map((row, index) => (
+                      <tr key={index} className="border-b border-[var(--border-default)] transition-colors duration-100 hover:bg-[var(--bg-app)]">
+                        <td className="px-3 py-2 font-medium text-[var(--text-primary)]">{row.student_name || row.name || '—'}</td>
+                        <td className="px-3 py-2 text-[var(--text-secondary)]">{row.subject || '—'}</td>
+                        <td className="px-3 py-2 text-right">
+                          <span className={`font-semibold ${parseFloat(row.grade) >= parseFloat(row.class_average) ? 'text-emerald-600' : 'text-[var(--brand-red)]'}`}>
+                            {row.grade}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-[var(--text-muted)]">{row.class_average || row.average || '—'}</td>
+                        <td className="px-3 py-2 text-right text-[var(--text-muted)]">{row.attendance || row['attendance_%'] || '—'}%</td>
+                        <td className="px-3 py-2 text-[var(--text-muted)]">{row.term || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          <button type="button" className="text-left text-xs text-[var(--brand-red)] hover:underline cursor-pointer" onClick={downloadSampleTemplate}>↓ Download sample CSV template</button>
           <label className="flex items-center gap-3 text-sm text-[var(--text-primary)]">
             <input type="checkbox" checked={form.notify} onChange={(event) => setForm({ ...form, notify: event.target.checked })} />
             Notify parents via email and WhatsApp
@@ -491,20 +659,50 @@ export function PerformanceBroadcasterView() {
         </form>
         <div className="portal-panel">
           <div className="mb-4 text-sm font-medium text-[var(--text-primary)]">Recent uploads</div>
+          <div className="mb-4 flex gap-2">
+            <select value={filterSubject} onChange={(event) => setFilterSubject(event.target.value)} className="flex-1 rounded-lg border border-[var(--border-default)] bg-white px-2 py-1.5 text-xs text-[var(--text-secondary)] focus:border-[var(--brand-navy)] focus:outline-none">
+              <option value="">All subjects</option>
+              {uniqueSubjects.map((subject) => <option key={subject} value={subject}>{subject}</option>)}
+            </select>
+            <select value={filterTerm} onChange={(event) => setFilterTerm(event.target.value)} className="flex-1 rounded-lg border border-[var(--border-default)] bg-white px-2 py-1.5 text-xs text-[var(--text-secondary)] focus:border-[var(--brand-navy)] focus:outline-none">
+              <option value="">All terms</option>
+              {uniqueTerms.map((term) => <option key={term} value={term}>{term}</option>)}
+            </select>
+          </div>
           <div className="space-y-3">
-            {uploads.map((group) => (
+            {filteredUploads.map((group) => (
               <div key={group.batchId} className="rounded-lg border border-[var(--border-default)] p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-medium text-[var(--text-primary)]">{group.batchResults[0]?.subject}</div>
                     <div className="text-xs text-[var(--text-muted)]">Batch {group.batchId}</div>
                   </div>
-                  <Badge status="published" />
+                  <div className="flex items-center gap-2">
+                    <Badge status="published" />
+                    <button type="button" className="portal-button-ghost h-8 w-8 p-0 text-[var(--brand-navy)]" onClick={() => downloadBatch(group.batchId)} aria-label="Download batch">
+                      <Download className="h-[15px] w-[15px]" />
+                    </button>
+                    <button type="button" className="portal-button-ghost h-8 w-8 p-0 text-[var(--brand-red)] hover:bg-[var(--brand-red-light)] hover:text-[var(--brand-red-dark)]" onClick={() => setPendingDeleteBatchId(group.batchId)} aria-label="Delete batch">
+                      <Trash2 className="h-[15px] w-[15px]" />
+                    </button>
+                  </div>
                 </div>
                 <div className="mt-3 text-sm text-[var(--text-secondary)]">{group.batchResults.length} students</div>
                 <div className="mt-1 text-xs text-[var(--text-muted)]">Uploaded by {group.batchResults[0]?.uploaded_by_name || user?.name}</div>
+                {pendingDeleteBatchId === group.batchId ? (
+                  <div className="mt-4 rounded-lg border border-[var(--brand-red-light)] bg-[var(--brand-red-light)] p-3">
+                    <div className="text-xs font-medium text-[var(--brand-navy)]">Delete this batch? This cannot be undone.</div>
+                    <div className="mt-3 flex gap-2">
+                      <button type="button" className="portal-button-danger text-xs" onClick={() => confirmDeleteBatch(group.batchId)}>Confirm</button>
+                      <button type="button" className="portal-button-secondary text-xs" onClick={() => setPendingDeleteBatchId(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ))}
+            {!filteredUploads.length && uploads.length ? (
+              <div className="text-center py-6 text-xs text-[var(--text-muted)]">No uploads match the selected filters.</div>
+            ) : null}
             {!uploads.length ? <EmptyState title="No uploads yet" message="Broadcast result sheets to see recent batches here." /> : null}
           </div>
         </div>
@@ -870,23 +1068,57 @@ export function StudentHomeView({ titlePrefix = '' }) {
 
   const noticeHighlights = notices.slice(0, 2)
   const recentReports = results.slice(0, 4)
+  const resultsHeading = titlePrefix ? "Your Child's Results" : 'My Results'
 
   return (
     <div>
       <PageHeader title={`${titlePrefix}${user?.name ? `${user.name}'s ` : 'Welcome back, '}Home`} subtitle={format(new Date(), 'EEEE, d MMMM yyyy')} />
       <div className="grid gap-6 lg:grid-cols-2">
-        <Table
-          data={recentReports}
-          loading={resultsLoading}
-          columns={[
-            { key: 'subject', label: 'Subject' },
-            { key: 'student_name', label: 'Teacher', render: (row) => row.uploaded_by_name || '—' },
-            { key: 'grade', label: 'Grade', render: (row) => row.grade },
-            { key: 'class_average', label: 'Class Average', render: (row) => row.class_average },
-            { key: 'attendance', label: 'Attendance %', render: (row) => row.attendance },
-          ]}
-          emptyMessage="No results released yet."
-        />
+        <div className="portal-panel">
+          <div className="mb-3 text-sm font-medium text-[var(--text-primary)]">{resultsHeading}</div>
+          {resultsLoading ? (
+            <div className="text-sm text-[var(--text-secondary)]">Loading results...</div>
+          ) : recentReports.length ? (
+            <div className="overflow-x-auto rounded-lg border border-[var(--border-default)]">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-[var(--border-default)] bg-[var(--bg-app)]">
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Subject</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Term</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">My Grade</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Class Avg</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Attendance</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">vs Average</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentReports.map((result) => {
+                    const diff = result.grade - result.class_average
+                    const above = diff >= 0
+                    return (
+                      <tr key={result.id} className="border-b border-[var(--border-default)] transition-colors duration-100 hover:bg-[var(--bg-app)]">
+                        <td className="px-4 py-3 text-sm font-medium text-[var(--text-primary)]">{result.subject}</td>
+                        <td className="px-4 py-3 text-sm text-[var(--text-secondary)]">{result.term}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`text-sm font-semibold ${above ? 'text-emerald-600' : 'text-[var(--brand-red)]'}`}>{result.grade}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm text-[var(--text-muted)]">{result.class_average}</td>
+                        <td className="px-4 py-3 text-right text-sm text-[var(--text-muted)]">{result.attendance}%</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${above ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-[var(--brand-red-light)] text-[var(--brand-red)]'}`}>
+                            {above ? '▲' : '▼'} {Math.abs(diff).toFixed(1)} pts
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState icon={BookOpen} title="No results published yet. Check back after your teacher uploads your report." />
+          )}
+        </div>
         <div className="space-y-4">
           <div className="portal-panel">
             <div className="mb-3 text-sm font-medium text-[var(--text-primary)]">Recent Performance Reports</div>
@@ -956,22 +1188,51 @@ export function StudentProgressView({ titlePrefix = '' }) {
 
 export function StudentResultHistoryView({ titlePrefix = '' }) {
   const { data: results = [] } = useApi(() => resultsApi.list(), [])
+  const heading = titlePrefix ? "Your Child's Results" : 'My Results'
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix}Result History`} subtitle="Review your released results." />
-      <Table
-        data={results}
-        loading={false}
-        columns={[
-          { key: 'term', label: 'Term' },
-          { key: 'subject', label: 'Subject' },
-          { key: 'grade', label: 'Grade', render: (row) => row.grade },
-          { key: 'class_average', label: 'Class Average', render: (row) => row.class_average },
-          { key: 'uploaded_by_name', label: 'Teacher' },
-          { key: 'created_at', label: 'Date', render: (row) => formatDate(row.created_at) },
-        ]}
-      />
+      <PageHeader title={heading} subtitle="Review your released results." />
+      {results.length ? (
+        <div className="overflow-x-auto rounded-lg border border-[var(--border-default)]">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-[var(--border-default)] bg-[var(--bg-app)]">
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Subject</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Term</th>
+                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">My Grade</th>
+                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Class Avg</th>
+                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Attendance</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">vs Average</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((result) => {
+                const diff = result.grade - result.class_average
+                const above = diff >= 0
+                return (
+                  <tr key={result.id} className="border-b border-[var(--border-default)] transition-colors duration-100 hover:bg-[var(--bg-app)]">
+                    <td className="px-4 py-3 text-sm font-medium text-[var(--text-primary)]">{result.subject}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-secondary)]">{result.term}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`text-sm font-semibold ${above ? 'text-emerald-600' : 'text-[var(--brand-red)]'}`}>{result.grade}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-[var(--text-muted)]">{result.class_average}</td>
+                    <td className="px-4 py-3 text-right text-sm text-[var(--text-muted)]">{result.attendance}%</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${above ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-[var(--brand-red-light)] text-[var(--brand-red)]'}`}>
+                        {above ? '▲' : '▼'} {Math.abs(diff).toFixed(1)} pts
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyState icon={BookOpen} title="No results published yet. Check back after your teacher uploads your report." />
+      )}
     </div>
   )
 }

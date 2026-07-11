@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { useAuth } from '../context/AuthContext.jsx'
 import ProtectedRoute from '../components/layout/ProtectedRoute.jsx'
-import LoginPage from '../pages/auth/LoginPage.jsx'
+import LoginPage, { ResetPasswordPage } from '../pages/auth/LoginPage.jsx'
 import { AdminDashboardView, EmailModuleView, MeetingWorkspaceView, PerformanceBroadcasterView, PortalManagementView, TeacherDashboardView, WhatsAppAlertsView, StudentHomeView, StudentProgressView, StudentResultHistoryView, NoticeBoardView, OpportunityBoardView, SettingsView } from '../pages/views.jsx'
 
 function RoleRedirect() {
@@ -24,6 +24,7 @@ export default function AppRouter() {
     <Routes>
       <Route path="/" element={<RoleRedirect />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/teacher" element={<Navigate to="/teacher/dashboard" replace />} />
       <Route path="/student" element={<Navigate to="/student/home" replace />} />

@@ -20,6 +20,8 @@ class User(Base):
     head_teacher = Column(Boolean, default=False, nullable=False)
     whatsapp_number = Column(String(32), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    password_reset_token = Column(String(64), nullable=True)
+    password_reset_expires = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     created_meetings = relationship('Meeting', back_populates='created_by_user', foreign_keys='Meeting.created_by')

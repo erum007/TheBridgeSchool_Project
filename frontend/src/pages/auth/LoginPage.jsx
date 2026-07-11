@@ -1,14 +1,17 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import { School } from 'lucide-react'
 
 import { useAuth } from '../../context/AuthContext.jsx'
+import { authApi } from '../../api/auth.js'
 
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
 
   const submit = async (event) => {
     event.preventDefault()
@@ -28,8 +31,16 @@ export default function LoginPage() {
     }
   }
 
-  const handleForgotPassword = () => {
-    toast('Password reset is not wired yet. Please contact an admin.')
+  const handleForgotPassword = async (event) => {
+    event.preventDefault()
+    try {
+      await authApi.forgotPassword(resetEmail)
+      toast.success('Reset link sent if account exists')
+      setShowForgotPassword(false)
+      setResetEmail('')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not send reset link')
+    }
   }
 
   return (
@@ -78,13 +89,61 @@ export default function LoginPage() {
                 onChange={(event) => setForm({ ...form, password: event.target.value })}
               />
             </div>
-            <button type="button" className="text-sm font-medium text-[var(--brand-red)] hover:text-[var(--brand-red-dark)]" onClick={handleForgotPassword}>
-              Forgot Password?
-            </button>
+            {showForgotPassword ? (
+              <div className="mt-4 rounded-lg border border-[var(--border-default)] bg-[var(--bg-app)] p-4">
+                <p className="mb-3 text-sm font-medium text-[var(--text-primary)]">Enter your email to receive a reset link</p>
+                <input
+                  type="email"
+                  placeholder="Your email address"
+                  value={resetEmail}
+                  onChange={(event) => setResetEmail(event.target.value)}
+                  className="mb-3 w-full rounded-lg border border-[var(--border-default)] px-3 py-2.5 text-sm focus:border-[var(--brand-navy)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-navy)]/10"
+                />
+                <div className="flex gap-2">
+                  <button type="button" onClick={handleForgotPassword} className="portal-button-primary px-4 py-2 text-sm">Send Reset Link</button>
+                  <button type="button" onClick={() => setShowForgotPassword(false)} className="portal-button-secondary px-4 py-2 text-sm">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" onClick={() => setShowForgotPassword(true)} className="text-xs text-[var(--brand-red)] hover:underline">Forgot password?</button>
+            )}
             <button type="submit" className="portal-button-primary w-full">Sign In</button>
           </form>
         </div>
       </main>
+    </div>
+  )
+}
+
+export function ResetPasswordPage() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const token = searchParams.get('token') || ''
+  const [form, setForm] = useState({ new_password: '', confirm_password: '' })
+
+  const submit = async (event) => {
+    event.preventDefault()
+    if (!form.new_password || form.new_password !== form.confirm_password) {
+      toast.error('Passwords do not match')
+      return
+    }
+    try {
+      await authApi.resetPassword(token, form.new_password)
+      toast.success('Password reset successfully')
+      navigate('/login')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not reset password')
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-white px-6 py-10">
+      <form className="w-full max-w-md space-y-4" onSubmit={submit}>
+        <h1 className="font-display text-2xl font-bold text-[var(--brand-navy)]">Reset Password</h1>
+        <input type="password" className="portal-input" placeholder="New password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} />
+        <input type="password" className="portal-input" placeholder="Confirm password" value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} />
+        <button type="submit" className="portal-button-primary w-full">Reset Password</button>
+      </form>
     </div>
   )
 }
