@@ -1,12 +1,8 @@
 export default function PageHeader({ title, subtitle, action, sectionLabel }) {
-  const label = sectionLabel || title
-
   return (
     <div className="mb-6 flex items-start justify-between gap-4 border-b border-[var(--border-default)] pb-5">
       <div>
-        <p className="mb-1 font-display text-xs font-semibold uppercase tracking-widest text-[var(--brand-red)]">
-          {label}
-        </p>
+        {sectionLabel ? <p className="mb-1 font-display text-xs font-semibold uppercase tracking-widest text-[var(--brand-red)]">{sectionLabel}</p> : null}
         <h1 className="font-display text-2xl font-bold text-[var(--brand-navy)]">{title}</h1>
         {subtitle ? <p className="mt-0.5 text-sm text-[var(--text-secondary)]">{subtitle}</p> : null}
       </div>

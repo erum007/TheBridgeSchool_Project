@@ -22,6 +22,8 @@ class Settings:
     access_token_expire_minutes: int = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '60'))
     gmail_client_id: str = os.getenv('GMAIL_CLIENT_ID', '')
     gmail_client_secret: str = os.getenv('GMAIL_CLIENT_SECRET', '')
+    gmail_sender: str = os.getenv('GMAIL_SENDER', '')
+    gmail_app_password: str = os.getenv('GMAIL_APP_PASSWORD', '')
     twilio_account_sid: str = os.getenv('TWILIO_ACCOUNT_SID', '')
     twilio_auth_token: str = os.getenv('TWILIO_AUTH_TOKEN', '')
     twilio_whatsapp_number: str = os.getenv('TWILIO_WHATSAPP_NUMBER', '')

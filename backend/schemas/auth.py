@@ -12,3 +12,12 @@ class TokenResponse(ORMBaseModel):
     access_token: str
     token_type: str
     user: dict
+
+
+class ForgotPasswordRequest(ORMBaseModel):
+    email: str
+
+
+class ResetPasswordRequest(ORMBaseModel):
+    token: str
+    new_password: str
