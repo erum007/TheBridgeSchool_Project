@@ -31,6 +31,8 @@ import { resultsApi } from '../api/results.js'
 import { noticesApi } from '../api/notices.js'
 import { opportunitiesApi } from '../api/opportunities.js'
 import { usersApi } from '../api/users.js'
+import { authApi } from '../api/auth.js'
+import { departmentsApi } from '../api/departments.js'
 import { whatsappApi } from '../api/whatsapp.js'
 
 import Badge from '../components/shared/Badge.jsx'
@@ -827,9 +829,28 @@ export function PortalManagementView() {
   const { data: notices = [], refetch: refetchNotices } = useApi(() => noticesApi.list(), [])
   const { data: opportunities = [], refetch: refetchOpportunities } = useApi(() => opportunitiesApi.list(), [])
   const { data: users = [], refetch: refetchUsers } = useApi(() => usersApi.list(), [])
+  const { data: departments = [], refetch: refetchDepartments } = useApi(() => departmentsApi.list(), [])
   const [noticeForm, setNoticeForm] = useState({ title: '', body: '', recipients: 'all', status: 'draft', publish_date: '' })
   const [opportunityForm, setOpportunityForm] = useState({ title: '', eligibility: '', deadline: '', link: '' })
-  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'teacher', password: '', department: '' })
+  const [userForm, setUserForm] = useState({ name: '', email: '', role: '', password: '', department: '' })
+  const [departmentName, setDepartmentName] = useState('')
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState('')
+  const [memberUserId, setMemberUserId] = useState('')
+
+  const generateTemporaryPassword = () => {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+    const lower = 'abcdefghijkmnopqrstuvwxyz'
+    const digits = '23456789'
+    const symbols = '!@#$%&*?'
+    const all = upper + lower + digits + symbols
+    const randomCharacter = (characters) => characters[crypto.getRandomValues(new Uint32Array(1))[0] % characters.length]
+    const password = [randomCharacter(upper), randomCharacter(lower), randomCharacter(digits), randomCharacter(symbols), ...Array.from({ length: 12 }, () => randomCharacter(all))]
+    for (let index = password.length - 1; index > 0; index -= 1) {
+      const swapIndex = crypto.getRandomValues(new Uint32Array(1))[0] % (index + 1)
+      ;[password[index], password[swapIndex]] = [password[swapIndex], password[index]]
+    }
+    setUserForm((current) => ({ ...current, password: password.join('') }))
+  }
 
   const submitNotice = async (event) => {
     event.preventDefault()
@@ -857,11 +878,20 @@ export function PortalManagementView() {
 
   const submitUser = async (event) => {
     event.preventDefault()
+    if (!userForm.name.trim() || !userForm.email.trim() || !userForm.role || !userForm.password || (userForm.role === 'staff' && !userForm.department)) {
+      toast.error('Please fill in every user field')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userForm.email.trim())) {
+      toast.error('Please enter a valid email address')
+      return
+    }
     try {
-      await usersApi.create({ ...userForm, head_teacher: false, is_active: true })
-      toast.success('User created')
-      setUserForm({ name: '', email: '', role: 'teacher', password: '', department: '' })
+      const response = await usersApi.create({ ...userForm, head_teacher: false, is_active: true })
+      toast.success(response.data.invitation_sent ? 'User created and credentials emailed' : 'User created, but the credential email could not be sent')
+      setUserForm({ name: '', email: '', role: '', password: '', department: '' })
       refetchUsers()
+      refetchDepartments()
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not create user')
     }
@@ -872,6 +902,42 @@ export function PortalManagementView() {
     try {
       await usersApi.remove(id)
       toast.success('User removed')
+      refetchUsers()
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not remove user')
+    }
+  }
+
+  const createDepartment = async (event) => {
+    event.preventDefault()
+    if (!departmentName.trim()) return toast.error('Enter a department or domain name')
+    try {
+      await departmentsApi.create({ name: departmentName })
+      setDepartmentName('')
+      refetchDepartments()
+      toast.success('Department/domain created')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not create department/domain')
+    }
+  }
+
+  const addDepartmentMember = async () => {
+    if (!selectedDepartmentId || !memberUserId) return toast.error('Select a department/domain and user')
+    try {
+      await departmentsApi.addMember(selectedDepartmentId, memberUserId)
+      setMemberUserId('')
+      refetchDepartments()
+      refetchUsers()
+      toast.success('User added to department/domain')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not add user')
+    }
+  }
+
+  const removeDepartmentMember = async (departmentId, userId) => {
+    try {
+      await departmentsApi.removeMember(departmentId, userId)
+      refetchDepartments()
       refetchUsers()
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not remove user')
@@ -983,6 +1049,27 @@ export function PortalManagementView() {
             ),
           },
           {
+            id: 'departments',
+            label: 'Departments & Domains',
+            content: (
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="space-y-3">
+                  {departments.map((department) => (
+                    <div key={department.id} className="portal-panel">
+                      <div className="flex items-center justify-between"><div className="font-medium text-[var(--text-primary)]">{department.name}</div><span className="text-xs text-[var(--text-muted)]">{department.members.length} member{department.members.length === 1 ? '' : 's'}</span></div>
+                      <div className="mt-3 flex flex-wrap gap-2">{department.members.length ? department.members.map((member) => <span key={member.id} className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-xs text-[var(--text-secondary)]">{member.name}<button type="button" className="text-[var(--brand-red)]" onClick={() => removeDepartmentMember(department.id, member.id)} aria-label={`Remove ${member.name}`}>×</button></span>) : <span className="text-sm text-[var(--text-muted)]">No members yet.</span>}</div>
+                    </div>
+                  ))}
+                  {!departments.length ? <EmptyState title="No departments or domains" message="Create one to organise staff, committees, or other groups." /> : null}
+                </div>
+                <div className="space-y-6">
+                  <form className="space-y-3 portal-panel" onSubmit={createDepartment}><div className="text-sm font-medium text-[var(--text-primary)]">Create department or domain</div><input required className="portal-input" placeholder="e.g. Admissions or Graduation Committee" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} /><button className="portal-button-primary">Create</button></form>
+                  <div className="space-y-3 portal-panel"><div className="text-sm font-medium text-[var(--text-primary)]">Add a member</div><select className="portal-input" value={selectedDepartmentId} onChange={(event) => setSelectedDepartmentId(event.target.value)}><option value="">Select department/domain</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select><select className="portal-input" value={memberUserId} onChange={(event) => setMemberUserId(event.target.value)}><option value="">Select user</option>{users.map((member) => <option key={member.id} value={member.id}>{member.name} — {member.role}</option>)}</select><button type="button" className="portal-button-primary" onClick={addDepartmentMember}>Add member</button></div>
+                </div>
+              </div>
+            ),
+          },
+          {
             id: 'users',
             label: 'User Management',
             content: (
@@ -994,7 +1081,7 @@ export function PortalManagementView() {
                     { key: 'name', label: 'Name' },
                     { key: 'email', label: 'Email' },
                     { key: 'role', label: 'Role', render: (row) => <Badge status={row.role} /> },
-                    { key: 'department', label: 'Department', render: (row) => row.department || '—' },
+                    { key: 'departments', label: 'Departments / Domains', render: (row) => row.departments?.join(', ') || '—' },
                     { key: 'is_active', label: 'Status', render: (row) => <Badge status={row.is_active ? 'connected' : 'failed'} /> },
                     { key: 'actions', label: 'Actions', render: (row) => <button className="portal-button-danger" onClick={() => deleteUser(row.id)}>Remove</button> },
                   ]}
@@ -1003,35 +1090,38 @@ export function PortalManagementView() {
                 <form className="space-y-4 portal-panel" onSubmit={submitUser}>
                   <div>
                     <label className="portal-label block">Name</label>
-                    <input className="portal-input mt-1" value={userForm.name} onChange={(event) => setUserForm({ ...userForm, name: event.target.value })} />
+                    <input required className="portal-input mt-1" value={userForm.name} onChange={(event) => setUserForm({ ...userForm, name: event.target.value })} />
                   </div>
                   <div>
                     <label className="portal-label block">Email</label>
-                    <input className="portal-input mt-1" value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} />
+                    <input required type="email" className="portal-input mt-1" value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} />
                   </div>
                   <div>
                     <label className="portal-label block">Role</label>
-                    <select className="portal-input mt-1" value={userForm.role} onChange={(event) => setUserForm({ ...userForm, role: event.target.value })}>
+                    <select required className="portal-input mt-1" value={userForm.role} onChange={(event) => setUserForm({ ...userForm, role: event.target.value })}>
+                      <option value="">Select role</option>
                       <option value="admin">Admin</option>
                       <option value="teacher">Teacher</option>
+                      <option value="staff">Staff</option>
                       <option value="student">Student</option>
                       <option value="parent">Parent</option>
                     </select>
                   </div>
-                  <div>
+                  {userForm.role === 'staff' ? <div>
                     <label className="portal-label block">Department</label>
-                    <select className="portal-input mt-1" value={userForm.department} onChange={(event) => setUserForm({ ...userForm, department: event.target.value })}>
-                      <option value="">No department yet</option>
-                      <option value="Academic">Academic</option>
-                      <option value="Operations">Operations</option>
-                      <option value="Admissions">Admissions</option>
-                      <option value="Student Affairs">Student Affairs</option>
-                      <option value="Finance">Finance</option>
+                    <select required className="portal-input mt-1" value={userForm.department} onChange={(event) => setUserForm({ ...userForm, department: event.target.value })}>
+                      <option value="">Select department</option>
+                      {departments.map((department) => <option key={department.id} value={department.name}>{department.name}</option>)}
                     </select>
-                  </div>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">Create departments/domains in the separate management tab.</p>
+                  </div> : null}
                   <div>
                     <label className="portal-label block">Temporary password</label>
-                    <input type="password" className="portal-input mt-1" value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} />
+                    <div className="mt-1 flex gap-2">
+                      <input required type="text" className="portal-input" value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} />
+                      <button type="button" className="portal-button-secondary whitespace-nowrap" onClick={generateTemporaryPassword}>Generate</button>
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">Use Generate for a secure 16-character password. It will be emailed to the user.</p>
                   </div>
                   <button type="submit" className="portal-button-primary">Add User</button>
                 </form>
@@ -1329,6 +1419,8 @@ export function SettingsView({ titlePrefix = '' }) {
   const [emailRequest, setEmailRequest] = useState('')
   const [emailEnabled, setEmailEnabled] = useState(true)
   const [whatsappEnabled, setWhatsappEnabled] = useState(true)
+  const [passwordForm, setPasswordForm] = useState({ otp: '', new_password: '', confirm_password: '' })
+  const [passwordCodeSent, setPasswordCodeSent] = useState(false)
 
   const saveWhatsapp = async () => {
     try {
@@ -1349,10 +1441,35 @@ export function SettingsView({ titlePrefix = '' }) {
     toast.success('Notification preferences saved')
   }
 
+  const requestPasswordCode = async () => {
+    try {
+      await authApi.requestPasswordChange()
+      setPasswordCodeSent(true)
+      toast.success('Verification code sent to your email')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not send verification code')
+    }
+  }
+
+  const changePassword = async () => {
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      toast.error('Passwords do not match')
+      return
+    }
+    try {
+      await authApi.confirmPasswordChange(passwordForm.otp, passwordForm.new_password)
+      toast.success('Password changed successfully')
+      setPasswordCodeSent(false)
+      setPasswordForm({ otp: '', new_password: '', confirm_password: '' })
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not change password')
+    }
+  }
+
   return (
     <div>
       <PageHeader title={`${titlePrefix}Settings`} subtitle="Manage contact details and notification preferences." />
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-2">
         <div className="portal-panel">
           <div className="text-sm font-medium text-[var(--text-primary)]">Update WhatsApp Number</div>
           <div className="mt-4 space-y-3">
@@ -1374,6 +1491,10 @@ export function SettingsView({ titlePrefix = '' }) {
             <label className="flex items-center gap-3"><input type="checkbox" checked={whatsappEnabled} onChange={(event) => setWhatsappEnabled(event.target.checked)} /> WhatsApp</label>
             <button type="button" className="portal-button-primary" onClick={savePreferences}>Save</button>
           </div>
+        </div>
+        <div className="portal-panel">
+          <div className="text-sm font-medium text-[var(--text-primary)]">Change Password</div>
+          {!passwordCodeSent ? <div className="mt-4 space-y-3"><p className="text-sm text-[var(--text-secondary)]">We’ll email a six-digit verification code before changing your password.</p><button type="button" className="portal-button-primary" onClick={requestPasswordCode}>Email verification code</button></div> : <div className="mt-4 space-y-3"><input inputMode="numeric" maxLength="6" className="portal-input" placeholder="Six-digit code" value={passwordForm.otp} onChange={(event) => setPasswordForm({ ...passwordForm, otp: event.target.value })} /><input type="password" className="portal-input" placeholder="New password" value={passwordForm.new_password} onChange={(event) => setPasswordForm({ ...passwordForm, new_password: event.target.value })} /><input type="password" className="portal-input" placeholder="Confirm new password" value={passwordForm.confirm_password} onChange={(event) => setPasswordForm({ ...passwordForm, confirm_password: event.target.value })} /><p className="text-xs text-[var(--text-muted)]">12+ characters with uppercase, lowercase, a number, and a symbol.</p><button type="button" className="portal-button-primary" onClick={changePassword}>Change password</button></div>}
         </div>
       </div>
     </div>

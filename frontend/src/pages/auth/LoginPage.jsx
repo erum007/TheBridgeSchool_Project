@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import { School } from 'lucide-react'
 
@@ -12,6 +12,8 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
+  const [resetForm, setResetForm] = useState({ otp: '', new_password: '', confirm_password: '' })
+  const [otpSent, setOtpSent] = useState(false)
 
   const submit = async (event) => {
     event.preventDefault()
@@ -35,11 +37,27 @@ export default function LoginPage() {
     event.preventDefault()
     try {
       await authApi.forgotPassword(resetEmail)
-      toast.success('Reset link sent if account exists')
-      setShowForgotPassword(false)
-      setResetEmail('')
+      toast.success('Verification code sent if the account exists')
+      setOtpSent(true)
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not send reset link')
+    }
+  }
+
+  const completeReset = async () => {
+    if (resetForm.new_password !== resetForm.confirm_password) {
+      toast.error('Passwords do not match')
+      return
+    }
+    try {
+      await authApi.resetPassword(resetEmail, resetForm.otp, resetForm.new_password)
+      toast.success('Password reset successfully')
+      setShowForgotPassword(false)
+      setOtpSent(false)
+      setResetEmail('')
+      setResetForm({ otp: '', new_password: '', confirm_password: '' })
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not reset password')
     }
   }
 
@@ -91,16 +109,10 @@ export default function LoginPage() {
             </div>
             {showForgotPassword ? (
               <div className="mt-4 rounded-lg border border-[var(--border-default)] bg-[var(--bg-app)] p-4">
-                <p className="mb-3 text-sm font-medium text-[var(--text-primary)]">Enter your email to receive a reset link</p>
-                <input
-                  type="email"
-                  placeholder="Your email address"
-                  value={resetEmail}
-                  onChange={(event) => setResetEmail(event.target.value)}
-                  className="mb-3 w-full rounded-lg border border-[var(--border-default)] px-3 py-2.5 text-sm focus:border-[var(--brand-navy)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-navy)]/10"
-                />
-                <div className="flex gap-2">
-                  <button type="button" onClick={handleForgotPassword} className="portal-button-primary px-4 py-2 text-sm">Send Reset Link</button>
+                <p className="mb-3 text-sm font-medium text-[var(--text-primary)]">{otpSent ? 'Enter the six-digit code from your email and choose a new password.' : 'Enter your email to receive a verification code.'}</p>
+                {!otpSent ? <input type="email" placeholder="Your email address" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} className="mb-3 w-full rounded-lg border border-[var(--border-default)] px-3 py-2.5 text-sm focus:border-[var(--brand-navy)] focus:outline-none" /> : <div className="space-y-2"><input inputMode="numeric" maxLength="6" placeholder="Verification code" className="portal-input" value={resetForm.otp} onChange={(event) => setResetForm({ ...resetForm, otp: event.target.value })} /><input type="password" placeholder="New password" className="portal-input" value={resetForm.new_password} onChange={(event) => setResetForm({ ...resetForm, new_password: event.target.value })} /><input type="password" placeholder="Confirm new password" className="portal-input" value={resetForm.confirm_password} onChange={(event) => setResetForm({ ...resetForm, confirm_password: event.target.value })} /><p className="text-xs text-[var(--text-muted)]">Use 12+ characters with upper/lowercase, a number, and a symbol.</p></div>}
+                <div className="mt-3 flex gap-2">
+                  <button type="button" onClick={otpSent ? completeReset : handleForgotPassword} className="portal-button-primary px-4 py-2 text-sm">{otpSent ? 'Reset Password' : 'Send Code'}</button>
                   <button type="button" onClick={() => setShowForgotPassword(false)} className="portal-button-secondary px-4 py-2 text-sm">Cancel</button>
                 </div>
               </div>
@@ -117,9 +129,7 @@ export default function LoginPage() {
 
 export function ResetPasswordPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const token = searchParams.get('token') || ''
-  const [form, setForm] = useState({ new_password: '', confirm_password: '' })
+  const [form, setForm] = useState({ email: '', otp: '', new_password: '', confirm_password: '' })
 
   const submit = async (event) => {
     event.preventDefault()
@@ -128,7 +138,7 @@ export function ResetPasswordPage() {
       return
     }
     try {
-      await authApi.resetPassword(token, form.new_password)
+      await authApi.resetPassword(form.email, form.otp, form.new_password)
       toast.success('Password reset successfully')
       navigate('/login')
     } catch (error) {
@@ -140,6 +150,8 @@ export function ResetPasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-white px-6 py-10">
       <form className="w-full max-w-md space-y-4" onSubmit={submit}>
         <h1 className="font-display text-2xl font-bold text-[var(--brand-navy)]">Reset Password</h1>
+        <input type="email" className="portal-input" placeholder="Email address" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+        <input inputMode="numeric" maxLength="6" className="portal-input" placeholder="Verification code" value={form.otp} onChange={(event) => setForm({ ...form, otp: event.target.value })} />
         <input type="password" className="portal-input" placeholder="New password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} />
         <input type="password" className="portal-input" placeholder="Confirm password" value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} />
         <button type="submit" className="portal-button-primary w-full">Reset Password</button>

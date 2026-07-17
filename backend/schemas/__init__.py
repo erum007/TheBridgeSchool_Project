@@ -1,5 +1,6 @@
 from .action_item import ActionItemCreate, ActionItemRead, ActionItemUpdate
-from .auth import ForgotPasswordRequest, LoginRequest, ResetPasswordRequest, TokenResponse
+from .auth import ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, PasswordOtpRequest, ResetPasswordRequest, TokenResponse
+from .department import DepartmentCreate, DepartmentMemberUpdate
 from .email import EmailSendRequest, EmailTemplateCreate, EmailTemplateRead, ScheduledEmailCreate, ScheduledEmailRead
 from .meeting import MeetingCreate, MeetingRead, MeetingUpdate
 from .notice import NoticeCreate, NoticeRead, NoticeUpdate

@@ -14,7 +14,7 @@ const emptyForm = {
 export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
   const { data: users = [] } = useApi(() => usersApi.list(), [isOpen])
   const [form, setForm] = useState(emptyForm)
-  const customDepartments = useMemo(() => [...new Set(users.map((user) => user.department).filter(Boolean))].sort(), [users])
+  const customDepartments = useMemo(() => [...new Set(users.flatMap((user) => user.departments || []))].sort(), [users])
 
   useEffect(() => {
     if (isOpen) setForm(emptyForm)
@@ -51,7 +51,7 @@ export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
     }
   }
 
-  const departmentMemberCount = users.filter((user) => user.department === form.department && user.is_active).length
+  const departmentMemberCount = users.filter((user) => user.departments?.includes(form.department) && user.is_active).length
   const externalEmailsText = form.external_emails.join('\n')
 
   return (
@@ -96,7 +96,7 @@ export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
               <div>
                 <div className="portal-label">Specific people</div>
                 <div className="mt-2 max-h-36 overflow-y-auto rounded-lg border border-[var(--border-default)] bg-white p-2">
-                  {users.map((user) => <label key={user.id} className="flex items-center gap-2 py-1.5 text-sm"><input type="checkbox" checked={form.attendee_ids.includes(user.id)} onChange={() => toggleListValue('attendee_ids', user.id)} /><span>{user.name}</span><span className="text-xs text-[var(--text-muted)]">{user.department || 'No department'}</span></label>)}
+                  {users.map((user) => <label key={user.id} className="flex items-center gap-2 py-1.5 text-sm"><input type="checkbox" checked={form.attendee_ids.includes(user.id)} onChange={() => toggleListValue('attendee_ids', user.id)} /><span>{user.name}</span><span className="text-xs text-[var(--text-muted)]">{user.departments?.join(', ') || 'No department/domain'}</span></label>)}
                 </div>
               </div>
             </div>

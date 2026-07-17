@@ -19,5 +19,15 @@ class ForgotPasswordRequest(ORMBaseModel):
 
 
 class ResetPasswordRequest(ORMBaseModel):
-    token: str
+    email: str
+    otp: str
+    new_password: str
+
+
+class PasswordOtpRequest(ORMBaseModel):
+    pass
+
+
+class ChangePasswordRequest(ORMBaseModel):
+    otp: str
     new_password: str

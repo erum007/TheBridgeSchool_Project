@@ -8,7 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from ..dependencies import get_current_user, get_db, require_roles
-from ..models import ActionItem, Meeting, MeetingStatus, User, UserRole
+from ..models import ActionItem, Department, Meeting, MeetingStatus, User, UserRole
 from ..schemas import MeetingCreate, MeetingUpdate
 from ..services.email_service import send_plain_email
 from ..services.serialization import serialize_meeting
@@ -46,13 +46,13 @@ def _resolve_audience(db: Session, payload: MeetingCreate) -> list[User]:
         departments = [name.strip() for name in payload.audience_departments if name.strip()]
         conditions = []
         if departments:
-            conditions.append(User.department.in_(departments))
+            conditions.append(User.departments.any(Department.name.in_(departments)))
         if payload.attendee_ids:
             conditions.append(User.id.in_(payload.attendee_ids))
         if not conditions:
             return []
         return db.query(User).filter(User.is_active == True, or_(*conditions)).all()
-    return db.query(User).filter(User.is_active == True, User.department == payload.department).all()
+    return db.query(User).filter(User.is_active == True, User.departments.any(Department.name == payload.department)).all()
 
 
 def _validated_external_emails(payload: MeetingCreate) -> list[str]:

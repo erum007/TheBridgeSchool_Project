@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_current_user, get_db, require_roles
-from ..models import User, UserRole
+from ..models import Department, User, UserRole
 from ..schemas import UserAdminUpdate, UserCreate, UserUpdateSettings
 from ..services.auth_service import get_password_hash
 from ..services.email_service import send_plain_email
@@ -12,6 +15,10 @@ from ..services.serialization import serialize_user
 
 
 router = APIRouter(prefix='/api/users', tags=['users'])
+
+
+def _valid_password(password: str) -> bool:
+    return len(password) >= 12 and any(char.islower() for char in password) and any(char.isupper() for char in password) and any(char.isdigit() for char in password) and any(not char.isalnum() for char in password)
 
 
 @router.get('')
@@ -22,23 +29,39 @@ def list_users(db: Session = Depends(get_db), current_user: User = Depends(requi
 
 @router.post('')
 def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin))):
-    if db.query(User).filter(User.email == payload.email).first():
+    email = payload.email.strip().lower()
+    if not payload.name.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Name is required')
+    if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Enter a valid email address')
+    if not _valid_password(payload.password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Temporary password must be 12+ characters with uppercase, lowercase, a number, and a symbol')
+    if db.query(User).filter(func.lower(User.email) == email).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Email already exists')
     try:
         role = UserRole(payload.role)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid role') from exc
+    department_name = payload.department.strip() if payload.department else None
+    if role == UserRole.staff and not department_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Department/domain is required for staff')
     user = User(
-        name=payload.name,
-        email=payload.email,
+        name=payload.name.strip(),
+        email=email,
         hashed_password=get_password_hash(payload.password),
         role=role,
         head_teacher=payload.head_teacher,
         whatsapp_number=payload.whatsapp_number,
-        department=payload.department,
+        department=department_name if role == UserRole.staff else None,
         is_active=payload.is_active,
     )
     db.add(user)
+    if department_name and role == UserRole.staff:
+        department = db.query(Department).filter(Department.name == department_name).first()
+        if not department:
+            department = Department(name=department_name)
+            db.add(department)
+        user.departments.append(department)
     db.commit()
     db.refresh(user)
 
@@ -48,7 +71,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user
 Your account has been created on The Bridge School Portal.
 
 Email: {user.email}
-Temporary Password: {payload.password}
+Password: {payload.password}
 Role: {user.role.value.title()}
 
 Login at: http://localhost:5173
@@ -67,11 +90,6 @@ The Bridge School"""
     .container {{ max-width: 600px; margin: 0 auto; padding: 32px 24px; }}
     .header {{ border-bottom: 3px solid #C0392B; padding-bottom: 16px; margin-bottom: 24px; }}
     .school-name {{ color: #1B2B6B; font-size: 20px; font-weight: bold; margin: 0; }}
-    .credentials {{ background: #f7f8fc; border: 1px solid #e2e5f0; border-radius: 8px; padding: 16px; margin: 20px 0; }}
-    .cred-row {{ display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e8e4dc; font-size: 14px; }}
-    .cred-row:last-child {{ border-bottom: none; }}
-    .cred-label {{ color: #8a8a8a; }}
-    .cred-value {{ font-weight: 600; color: #1B2B6B; }}
     .btn {{ display: inline-block; background: #C0392B; color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; margin: 20px 0; }}
     .footer {{ margin-top: 32px; padding-top: 16px; border-top: 1px solid #e8e4dc; font-size: 13px; color: #8a8a8a; }}
   </style>
@@ -83,13 +101,15 @@ The Bridge School"""
     </div>
     <p>Dear <strong>{user.name}</strong>,</p>
     <p>Your account has been created on The Bridge School Portal. Here are your login credentials:</p>
-    <div class=\"credentials\">
-      <div class=\"cred-row\"><span class=\"cred-label\">Email</span><span class=\"cred-value\">{user.email}</span></div>
-      <div class=\"cred-row\"><span class=\"cred-label\">Temporary Password</span><span class=\"cred-value\">{payload.password}</span></div>
-      <div class=\"cred-row\"><span class=\"cred-label\">Role</span><span class=\"cred-value\">{user.role.value.title()}</span></div>
+    <div style=\"background:#f7f8fc;border:1px solid #e2e5f0;border-radius:8px;margin:20px 0;overflow:hidden;\">
+      <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse;\">
+        <tr><td style=\"padding:12px 16px;border-bottom:1px solid #e2e5f0;color:#6b7280;font-size:14px;width:38%;\">Email</td><td style=\"padding:12px 16px;border-bottom:1px solid #e2e5f0;color:#1B2B6B;font-size:14px;font-weight:600;\">{user.email}</td></tr>
+        <tr><td style=\"padding:12px 16px;border-bottom:1px solid #e2e5f0;color:#6b7280;font-size:14px;\">Password</td><td style=\"padding:12px 16px;border-bottom:1px solid #e2e5f0;color:#1B2B6B;font-size:14px;font-weight:600;\">{payload.password}</td></tr>
+        <tr><td style=\"padding:12px 16px;color:#6b7280;font-size:14px;\">Role</td><td style=\"padding:12px 16px;color:#1B2B6B;font-size:14px;font-weight:600;\">{user.role.value.title()}</td></tr>
+      </table>
     </div>
     <a href=\"http://localhost:5173\" class=\"btn\">Login to Portal</a>
-    <p style=\"font-size: 13px; color: #8a8a8a;\">Please change your password after your first login.</p>
+    <p style=\"font-size: 13px; color: #8a8a8a;\">For your security, please change your password after you sign in.</p>
     <div class=\"footer\">
       <strong>The Bridge School Portal</strong><br>
       This is an automated message.
@@ -98,11 +118,10 @@ The Bridge School"""
 </body>
 </html>
 """
-    try:
-        send_plain_email(user.email, subject, plain_body, html_body=html_body)
-    except Exception:
-        pass
-    return serialize_user(user)
+    invitation_sent = send_plain_email(user.email, subject, plain_body, html_body=html_body)
+    response = serialize_user(user)
+    response['invitation_sent'] = invitation_sent
+    return response
 
 
 @router.patch('/{user_id}')

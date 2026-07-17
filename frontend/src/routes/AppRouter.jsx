@@ -13,6 +13,8 @@ function RoleRedirect() {
       ? '/admin/dashboard'
       : user.role === 'teacher'
         ? '/teacher/dashboard'
+        : user.role === 'staff'
+          ? '/staff/dashboard'
         : user.role === 'student'
           ? '/student/home'
           : '/parent/home'
@@ -27,6 +29,7 @@ export default function AppRouter() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/teacher" element={<Navigate to="/teacher/dashboard" replace />} />
+      <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />
       <Route path="/student" element={<Navigate to="/student/home" replace />} />
       <Route path="/parent" element={<Navigate to="/parent/home" replace />} />
 
@@ -36,11 +39,16 @@ export default function AppRouter() {
       <Route path="/admin/results" element={<ProtectedRoute roles={[ 'admin' ]}><PerformanceBroadcasterView /></ProtectedRoute>} />
       <Route path="/admin/whatsapp" element={<ProtectedRoute roles={[ 'admin' ]}><WhatsAppAlertsView /></ProtectedRoute>} />
       <Route path="/admin/portal" element={<ProtectedRoute roles={[ 'admin' ]}><PortalManagementView /></ProtectedRoute>} />
+      <Route path="/admin/settings" element={<ProtectedRoute roles={[ 'admin' ]}><SettingsView /></ProtectedRoute>} />
 
       <Route path="/teacher/dashboard" element={<ProtectedRoute roles={[ 'teacher' ]}><TeacherDashboardView /></ProtectedRoute>} />
       <Route path="/teacher/meetings" element={<ProtectedRoute roles={[ 'teacher' ]}><MeetingWorkspaceView canCreateMeeting /></ProtectedRoute>} />
       <Route path="/teacher/results" element={<ProtectedRoute roles={[ 'teacher' ]}><PerformanceBroadcasterView /></ProtectedRoute>} />
       <Route path="/teacher/broadcast" element={<ProtectedRoute roles={[ 'teacher' ]}><PerformanceBroadcasterView /></ProtectedRoute>} />
+      <Route path="/teacher/settings" element={<ProtectedRoute roles={[ 'teacher' ]}><SettingsView /></ProtectedRoute>} />
+
+      <Route path="/staff/dashboard" element={<ProtectedRoute roles={[ 'staff' ]}><TeacherDashboardView /></ProtectedRoute>} />
+      <Route path="/staff/settings" element={<ProtectedRoute roles={[ 'staff' ]}><SettingsView /></ProtectedRoute>} />
 
       <Route path="/student/home" element={<ProtectedRoute roles={[ 'student' ]}><StudentHomeView /></ProtectedRoute>} />
       <Route path="/student/progress" element={<ProtectedRoute roles={[ 'student' ]}><StudentProgressView /></ProtectedRoute>} />

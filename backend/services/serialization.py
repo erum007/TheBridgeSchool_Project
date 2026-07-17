@@ -22,6 +22,7 @@ def serialize_user(user):
         'head_teacher': user.head_teacher,
         'whatsapp_number': user.whatsapp_number,
         'department': user.department,
+        'departments': [department.name for department in getattr(user, 'departments', [])],
         'is_active': user.is_active,
         'created_at': iso(user.created_at),
     }
@@ -44,6 +45,15 @@ def serialize_action_item(action_item):
             'is_active': reminder.is_active,
             'last_sent_at': iso(reminder.last_sent_at),
         } if reminder else None,
+    }
+
+
+def serialize_department(department):
+    return {
+        'id': department.id,
+        'name': department.name,
+        'members': [serialize_user(member) for member in getattr(department, 'members', [])],
+        'created_at': iso(department.created_at),
     }
 
 

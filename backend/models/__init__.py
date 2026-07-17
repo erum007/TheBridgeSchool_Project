@@ -10,7 +10,9 @@ from .common import (
     WhatsAppStatus,
     meeting_attendees,
     parent_student_links,
+    user_departments,
 )
+from .department import Department
 from .email_template import EmailTemplate
 from .meeting import Meeting
 from .notice import Notice

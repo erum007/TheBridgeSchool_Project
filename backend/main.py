@@ -11,6 +11,7 @@ from .models import (
     ActionItem,
     ActionItemStatus,
     ActionItemWhatsAppReminder,
+    Department,
     EmailStatus,
     EmailTemplate,
     Meeting,
@@ -32,6 +33,7 @@ from .routers import (
     ai_router,
     auth_router,
     dashboard_router,
+    departments_router,
     emails_router,
     meetings_router,
     notices_router,
@@ -67,6 +69,7 @@ app.include_router(notices_router)
 app.include_router(opportunities_router)
 app.include_router(whatsapp_router)
 app.include_router(dashboard_router)
+app.include_router(departments_router)
 app.include_router(ai_router)
 
 
@@ -177,6 +180,22 @@ def _seed_demo_data(db: Session) -> None:
     db.commit()
 
 
+def _backfill_department_memberships(db: Session) -> None:
+    legacy_users = db.query(User).filter(User.department.isnot(None)).all()
+    for user in legacy_users:
+        name = user.department.strip() if user.department else ''
+        if not name:
+            continue
+        department = db.query(Department).filter(Department.name == name).first()
+        if not department:
+            department = Department(name=name)
+            db.add(department)
+            db.flush()
+        if department not in user.departments:
+            user.departments.append(department)
+    db.commit()
+
+
 @app.on_event('startup')
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
@@ -186,6 +205,7 @@ def on_startup() -> None:
     db = SessionLocal()
     try:
         _seed_demo_data(db)
+        _backfill_department_memberships(db)
     finally:
         db.close()
 
