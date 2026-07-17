@@ -19,6 +19,7 @@ class User(Base):
     role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.teacher)
     head_teacher = Column(Boolean, default=False, nullable=False)
     whatsapp_number = Column(String(32), nullable=True)
+    department = Column(String(120), nullable=True, index=True)
     is_active = Column(Boolean, default=True, nullable=False)
     password_reset_token = Column(String(64), nullable=True)
     password_reset_expires = Column(DateTime, nullable=True)

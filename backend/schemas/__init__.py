@@ -5,5 +5,5 @@ from .meeting import MeetingCreate, MeetingRead, MeetingUpdate
 from .notice import NoticeCreate, NoticeRead, NoticeUpdate
 from .opportunity import OpportunityCreate, OpportunityRead
 from .result import ResultRead
-from .user import UserCreate, UserRead, UserUpdateSettings
+from .user import UserAdminUpdate, UserCreate, UserRead, UserUpdateSettings
 from .whatsapp import WhatsAppLogRead, WhatsAppSendRequest

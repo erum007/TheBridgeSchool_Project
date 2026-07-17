@@ -27,6 +27,7 @@ class Settings:
     twilio_account_sid: str = os.getenv('TWILIO_ACCOUNT_SID', '')
     twilio_auth_token: str = os.getenv('TWILIO_AUTH_TOKEN', '')
     twilio_whatsapp_number: str = os.getenv('TWILIO_WHATSAPP_NUMBER', '')
+    twilio_whatsapp_reminder_content_sid: str = os.getenv('TWILIO_WHATSAPP_REMINDER_CONTENT_SID', '')
     gemini_api_key: str = os.getenv('GEMINI_API_KEY', '')
     db_ssl_ca: str = os.getenv('DB_SSL_CA', '')
 

@@ -87,7 +87,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summary, setSummary] = useState('')
   const [assigneeFilter, setAssigneeFilter] = useState('all')
-  const [actionForm, setActionForm] = useState({ meeting_id: '', description: '', assigned_to: '', due_date: '' })
+  const [actionForm, setActionForm] = useState({ meeting_id: '', description: '', assigned_to: '', due_date: '', whatsapp_reminder_frequency: 'none', whatsapp_reminder_at: '' })
 
   const visibleMeetings = meetings.filter((meeting) => meeting.status)
   const pastMeetings = meetings.filter((meeting) => meeting.status === 'past')
@@ -161,7 +161,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     event.preventDefault()
     try {
       await actionItemsApi.create(actionForm)
-      setActionForm({ meeting_id: '', description: '', assigned_to: '', due_date: '' })
+      setActionForm({ meeting_id: '', description: '', assigned_to: '', due_date: '', whatsapp_reminder_frequency: 'none', whatsapp_reminder_at: '' })
       refetchActions()
       toast.success('Action item created')
     } catch (error) {
@@ -247,10 +247,26 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                     <option value="">Assign to</option>
                     {users.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
                   </select>
+                  <select className="portal-input" value={actionForm.whatsapp_reminder_frequency} onChange={(event) => setActionForm({ ...actionForm, whatsapp_reminder_frequency: event.target.value })}>
+                    <option value="none">No WhatsApp reminder</option>
+                    <option value="hourly">WhatsApp: hourly</option>
+                    <option value="daily">WhatsApp: daily</option>
+                    <option value="weekly">WhatsApp: weekly</option>
+                    <option value="custom">WhatsApp: once at custom time</option>
+                  </select>
                   <div className="flex gap-3">
                     <input type="date" className="portal-input" value={actionForm.due_date} onChange={(event) => setActionForm({ ...actionForm, due_date: event.target.value })} />
                     <button type="submit" className="portal-button-primary whitespace-nowrap">Add Action Item</button>
                   </div>
+                  {actionForm.whatsapp_reminder_frequency !== 'none' ? (
+                    <div className="lg:col-span-2">
+                      <label className="portal-label block">First reminder date and time (UTC)</label>
+                      <input type="datetime-local" required className="portal-input mt-1" value={actionForm.whatsapp_reminder_at} onChange={(event) => setActionForm({ ...actionForm, whatsapp_reminder_at: event.target.value })} />
+                    </div>
+                  ) : null}
+                  {actionForm.whatsapp_reminder_frequency !== 'none' ? (
+                    <p className="lg:col-span-2 text-xs text-[var(--text-muted)]">The assignee must have a WhatsApp number saved in their profile. Reminders stop when the action item is marked done.</p>
+                  ) : null}
                 </form>
               </div>
             ),
@@ -813,7 +829,7 @@ export function PortalManagementView() {
   const { data: users = [], refetch: refetchUsers } = useApi(() => usersApi.list(), [])
   const [noticeForm, setNoticeForm] = useState({ title: '', body: '', recipients: 'all', status: 'draft', publish_date: '' })
   const [opportunityForm, setOpportunityForm] = useState({ title: '', eligibility: '', deadline: '', link: '' })
-  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'teacher', password: '' })
+  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'teacher', password: '', department: '' })
 
   const submitNotice = async (event) => {
     event.preventDefault()
@@ -844,7 +860,7 @@ export function PortalManagementView() {
     try {
       await usersApi.create({ ...userForm, head_teacher: false, is_active: true })
       toast.success('User created')
-      setUserForm({ name: '', email: '', role: 'teacher', password: '' })
+      setUserForm({ name: '', email: '', role: 'teacher', password: '', department: '' })
       refetchUsers()
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not create user')
@@ -978,6 +994,7 @@ export function PortalManagementView() {
                     { key: 'name', label: 'Name' },
                     { key: 'email', label: 'Email' },
                     { key: 'role', label: 'Role', render: (row) => <Badge status={row.role} /> },
+                    { key: 'department', label: 'Department', render: (row) => row.department || '—' },
                     { key: 'is_active', label: 'Status', render: (row) => <Badge status={row.is_active ? 'connected' : 'failed'} /> },
                     { key: 'actions', label: 'Actions', render: (row) => <button className="portal-button-danger" onClick={() => deleteUser(row.id)}>Remove</button> },
                   ]}
@@ -999,6 +1016,17 @@ export function PortalManagementView() {
                       <option value="teacher">Teacher</option>
                       <option value="student">Student</option>
                       <option value="parent">Parent</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="portal-label block">Department</label>
+                    <select className="portal-input mt-1" value={userForm.department} onChange={(event) => setUserForm({ ...userForm, department: event.target.value })}>
+                      <option value="">No department yet</option>
+                      <option value="Academic">Academic</option>
+                      <option value="Operations">Operations</option>
+                      <option value="Admissions">Admissions</option>
+                      <option value="Student Affairs">Student Affairs</option>
+                      <option value="Finance">Finance</option>
                     </select>
                   </div>
                   <div>
@@ -1351,4 +1379,3 @@ export function SettingsView({ titlePrefix = '' }) {
     </div>
   )
 }
-

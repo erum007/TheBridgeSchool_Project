@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..dependencies import get_current_user, get_db, require_roles
 from ..models import User, UserRole
-from ..schemas import UserCreate, UserUpdateSettings
+from ..schemas import UserAdminUpdate, UserCreate, UserUpdateSettings
 from ..services.auth_service import get_password_hash
 from ..services.email_service import send_plain_email
 from ..services.serialization import serialize_user
@@ -35,6 +35,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user
         role=role,
         head_teacher=payload.head_teacher,
         whatsapp_number=payload.whatsapp_number,
+        department=payload.department,
         is_active=payload.is_active,
     )
     db.add(user)
@@ -101,6 +102,18 @@ The Bridge School"""
         send_plain_email(user.email, subject, plain_body, html_body=html_body)
     except Exception:
         pass
+    return serialize_user(user)
+
+
+@router.patch('/{user_id}')
+def update_user(user_id: int, payload: UserAdminUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin))):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found')
+    if 'department' in payload.model_fields_set:
+        user.department = payload.department.strip() if payload.department else None
+    db.commit()
+    db.refresh(user)
     return serialize_user(user)
 
 

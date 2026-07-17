@@ -8,11 +8,16 @@ from .common import ORMBaseModel
 
 
 class MeetingCreate(ORMBaseModel):
-    title: str
+    title: str = Field(min_length=1)
     scheduled_at: str
     department: str
     attendee_ids: list[int] = Field(default_factory=list)
-    notes: Optional[str] = None
+    audience_departments: list[str] = Field(default_factory=list)
+    external_emails: list[str] = Field(default_factory=list)
+    agenda: Optional[str] = None
+    meeting_mode: str = 'in_person'
+    meeting_link: Optional[str] = None
+    location: Optional[str] = None
 
 
 class MeetingUpdate(ORMBaseModel):
@@ -22,6 +27,10 @@ class MeetingUpdate(ORMBaseModel):
     scheduled_at: Optional[str] = None
     title: Optional[str] = None
     department: Optional[str] = None
+    agenda: Optional[str] = None
+    meeting_mode: Optional[str] = None
+    meeting_link: Optional[str] = None
+    location: Optional[str] = None
 
 
 class MeetingRead(ORMBaseModel):
@@ -31,6 +40,10 @@ class MeetingRead(ORMBaseModel):
     department: str
     status: str
     notes: Optional[str] = None
+    agenda: Optional[str] = None
+    meeting_mode: str
+    meeting_link: Optional[str] = None
+    location: Optional[str] = None
     ai_summary: Optional[str] = None
     created_by: int
     created_at: str

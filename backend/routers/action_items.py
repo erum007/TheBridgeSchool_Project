@@ -7,14 +7,38 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 
 from ..dependencies import get_current_user, get_db, require_roles
-from ..models import ActionItem, ActionItemStatus, User, UserRole
+from ..models import ActionItem, ActionItemStatus, ActionItemWhatsAppReminder, User, UserRole
 from ..schemas import ActionItemCreate, ActionItemUpdate
 from ..services.email_service import send_plain_email
 from ..services.scheduler_service import ensure_scheduler_started
+from ..services.action_item_whatsapp_reminder_service import VALID_FREQUENCIES, cancel_reminder, parse_run_at, schedule_reminder
 from ..services.serialization import serialize_action_item
 
 
 router = APIRouter(prefix='/api/action-items', tags=['action-items'])
+
+
+def _set_whatsapp_reminder(action_item, frequency: str | None, run_at_value: str | None, created_by: int, db: Session):
+    existing = action_item.whatsapp_reminder
+    if not frequency or frequency == 'none':
+        if existing:
+            existing.is_active = False
+            db.flush()
+            cancel_reminder(existing.id)
+        return
+    if frequency not in VALID_FREQUENCIES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid WhatsApp reminder frequency')
+    try:
+        run_at = parse_run_at(run_at_value)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if existing:
+        existing.frequency, existing.run_at, existing.is_active = frequency, run_at, True
+    else:
+        existing = ActionItemWhatsAppReminder(action_item_id=action_item.id, frequency=frequency, run_at=run_at, created_by=created_by)
+        db.add(existing)
+    db.flush()
+    schedule_reminder(existing)
 
 
 def _schedule_reminder(action_item, db):
@@ -104,7 +128,7 @@ The Bridge School Portal"""
 
 @router.get('')
 def list_action_items(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user)).order_by(ActionItem.created_at.desc())
+    query = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user), selectinload(ActionItem.whatsapp_reminder)).order_by(ActionItem.created_at.desc())
     if current_user.role != UserRole.admin:
         query = query.filter(ActionItem.assigned_to == current_user.id)
     return [serialize_action_item(action_item) for action_item in query.all()]
@@ -123,14 +147,16 @@ def create_action_item(payload: ActionItemCreate, db: Session = Depends(get_db),
     db.add(action_item)
     db.commit()
     db.refresh(action_item)
+    _set_whatsapp_reminder(action_item, payload.whatsapp_reminder_frequency, payload.whatsapp_reminder_at, current_user.id, db)
+    db.commit()
     _schedule_reminder(action_item, db)
-    action_item = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user)).filter(ActionItem.id == action_item.id).first()
+    action_item = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user), selectinload(ActionItem.whatsapp_reminder)).filter(ActionItem.id == action_item.id).first()
     return serialize_action_item(action_item)
 
 
 @router.patch('/{action_item_id}')
 def update_action_item(action_item_id: int, payload: ActionItemUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    action_item = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user)).filter(ActionItem.id == action_item_id).first()
+    action_item = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user), selectinload(ActionItem.whatsapp_reminder)).filter(ActionItem.id == action_item_id).first()
     if not action_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Action item not found')
     if current_user.role != UserRole.admin and action_item.assigned_to != current_user.id:
@@ -143,10 +169,16 @@ def update_action_item(action_item_id: int, payload: ActionItemUpdate, db: Sessi
         action_item.assigned_to = payload.assigned_to
     if payload.due_date is not None:
         action_item.due_date = date.fromisoformat(payload.due_date) if payload.due_date else None
+    if 'whatsapp_reminder_frequency' in payload.model_fields_set:
+        _set_whatsapp_reminder(action_item, payload.whatsapp_reminder_frequency, payload.whatsapp_reminder_at, current_user.id, db)
     db.commit()
     db.refresh(action_item)
     _schedule_reminder(action_item, db)
-    action_item = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user)).filter(ActionItem.id == action_item_id).first()
+    if action_item.status == ActionItemStatus.done and action_item.whatsapp_reminder:
+        action_item.whatsapp_reminder.is_active = False
+        cancel_reminder(action_item.whatsapp_reminder.id)
+        db.commit()
+    action_item = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user), selectinload(ActionItem.whatsapp_reminder)).filter(ActionItem.id == action_item_id).first()
     return serialize_action_item(action_item)
 
 
@@ -155,6 +187,8 @@ def delete_action_item(action_item_id: int, db: Session = Depends(get_db), curre
     action_item = db.get(ActionItem, action_item_id)
     if not action_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Action item not found')
+    if action_item.whatsapp_reminder:
+        cancel_reminder(action_item.whatsapp_reminder.id)
     db.delete(action_item)
     db.commit()
     return {'detail': 'Action item deleted'}

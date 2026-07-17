@@ -10,6 +10,7 @@ from .database import Base, SessionLocal, engine
 from .models import (
     ActionItem,
     ActionItemStatus,
+    ActionItemWhatsAppReminder,
     EmailStatus,
     EmailTemplate,
     Meeting,
@@ -41,6 +42,8 @@ from .routers import (
 )
 from .services.auth_service import get_password_hash
 from .services.scheduler_service import ensure_scheduler_started
+from .services.action_item_whatsapp_reminder_service import restore_reminders
+from .services.schema_migration_service import apply_additive_schema_updates
 
 
 app = FastAPI(title='Bridge School Portal API')
@@ -177,7 +180,9 @@ def _seed_demo_data(db: Session) -> None:
 @app.on_event('startup')
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
+    apply_additive_schema_updates(engine)
     ensure_scheduler_started()
+    restore_reminders()
     db = SessionLocal()
     try:
         _seed_demo_data(db)
