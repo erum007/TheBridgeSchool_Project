@@ -10,6 +10,7 @@ from ..database import Base
 class UserRole(str, Enum):
     admin = 'admin'
     teacher = 'teacher'
+    staff = 'staff'
     student = 'student'
     parent = 'parent'
 
@@ -65,4 +66,12 @@ parent_student_links = Table(
     Base.metadata,
     Column('parent_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
     Column('student_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
+user_departments = Table(
+    'user_departments',
+    Base.metadata,
+    Column('user_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+    Column('department_id', ForeignKey('departments.id', ondelete='CASCADE'), primary_key=True),
 )

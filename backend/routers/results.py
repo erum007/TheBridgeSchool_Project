@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from io import StringIO
 import uuid
 
+import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
 
 from ..dependencies import get_current_user, get_db
 from ..models import Result, User, UserRole
 from ..services.auth_service import get_password_hash
-from ..services.results_service import parse_results_upload
+from ..services.results_service import parse_results_upload, send_performance_report_emails
 from ..services.serialization import serialize_result
 
 
@@ -59,7 +62,20 @@ async def upload_results(
     db.commit()
     for result in created:
         db.refresh(result)
-    return {'count': len(created), 'batch_id': created[0].batch_id if created else uuid.uuid4().hex[:12]}
+
+    emails_sent = 0
+    emails_failed = 0
+    if notify and created:
+        summary = send_performance_report_emails(db, created, current_user)
+        emails_sent = summary['sent']
+        emails_failed = summary['failed']
+
+    return {
+        'count': len(created),
+        'batch_id': created[0].batch_id if created else uuid.uuid4().hex[:12],
+        'emails_sent': emails_sent,
+        'emails_failed': emails_failed,
+    }
 
 
 @router.get('')
@@ -74,3 +90,39 @@ def list_results(db: Session = Depends(get_db), current_user: User = Depends(get
         else:
             query = query.filter(Result.student_id == current_user.id)
     return [serialize_result(result) for result in query.all()]
+
+
+@router.get('/batch/{batch_id}/download')
+def download_batch(batch_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in {UserRole.admin, UserRole.teacher}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
+
+    results = db.query(Result).options(selectinload(Result.student)).filter(Result.batch_id == batch_id).order_by(Result.id.asc()).all()
+    rows = [
+        {
+            'Student Name': result.student.name if result.student else '',
+            'Email': result.student.email if result.student else '',
+            'Subject': result.subject,
+            'Grade': result.grade,
+            'Class Average': result.class_average,
+            'Attendance %': f'{result.attendance:g}%',
+            'Term': result.term,
+        }
+        for result in results
+    ]
+    frame = pd.DataFrame(rows, columns=['Student Name', 'Email', 'Subject', 'Grade', 'Class Average', 'Attendance %', 'Term'])
+    buffer = StringIO()
+    frame.to_csv(buffer, index=False)
+    response = StreamingResponse(iter([buffer.getvalue()]), media_type='text/csv')
+    response.headers['Content-Disposition'] = f'attachment; filename="results_{batch_id}.csv"'
+    return response
+
+
+@router.delete('/batch/{batch_id}')
+def delete_batch(batch_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
+
+    deleted = db.query(Result).filter(Result.batch_id == batch_id).delete(synchronize_session=False)
+    db.commit()
+    return {'deleted': deleted}

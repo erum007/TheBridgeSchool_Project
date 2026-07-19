@@ -1,4 +1,5 @@
 from .action_item import ActionItem
+from .action_item_whatsapp_reminder import ActionItemWhatsAppReminder
 from .common import (
     ActionItemStatus,
     EmailStatus,
@@ -9,7 +10,9 @@ from .common import (
     WhatsAppStatus,
     meeting_attendees,
     parent_student_links,
+    user_departments,
 )
+from .department import Department
 from .email_template import EmailTemplate
 from .meeting import Meeting
 from .notice import Notice

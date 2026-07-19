@@ -6,7 +6,7 @@ from sqlalchemy import Boolean, Column, DateTime, Enum as SQLEnum, Integer, Stri
 from sqlalchemy.orm import relationship
 
 from ..database import Base
-from .common import UserRole, meeting_attendees, parent_student_links
+from .common import UserRole, meeting_attendees, parent_student_links, user_departments
 
 
 class User(Base):
@@ -19,7 +19,10 @@ class User(Base):
     role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.teacher)
     head_teacher = Column(Boolean, default=False, nullable=False)
     whatsapp_number = Column(String(32), nullable=True)
+    department = Column(String(120), nullable=True, index=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    password_reset_token = Column(String(64), nullable=True)
+    password_reset_expires = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     created_meetings = relationship('Meeting', back_populates='created_by_user', foreign_keys='Meeting.created_by')
@@ -39,3 +42,4 @@ class User(Base):
         secondaryjoin=id == parent_student_links.c.student_id,
         backref='guardians',
     )
+    departments = relationship('Department', secondary=user_departments, back_populates='members')

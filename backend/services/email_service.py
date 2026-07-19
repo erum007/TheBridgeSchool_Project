@@ -1,10 +1,46 @@
 from __future__ import annotations
 
+import logging
+import smtplib
 from collections import defaultdict
 from datetime import date, datetime, timezone
+from email.message import EmailMessage
+from email.utils import formataddr
 
 from ..config import settings
 from ..models import EmailStatus
+
+
+logger = logging.getLogger(__name__)
+
+
+def send_plain_email(to_email: str, subject: str, body: str, html_body: str | None = None) -> bool:
+    """
+    Send a plain text email via Gmail SMTP using App Password.
+    Returns True on success, False on failure.
+    Logs the error but does not raise - one failure must not stop others.
+    """
+    if not settings.gmail_sender or not settings.gmail_app_password:
+        logger.warning('Gmail sender or app password is not configured')
+        return False
+
+    message = EmailMessage()
+    message['From'] = formataddr(('The Bridge School', settings.gmail_sender))
+    message['To'] = to_email
+    message['Subject'] = subject
+    message['Reply-To'] = settings.gmail_sender
+    message.set_content(body)
+    if html_body:
+        message.add_alternative(html_body, subtype='html')
+
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(settings.gmail_sender, settings.gmail_app_password)
+            server.send_message(message)
+        return True
+    except Exception:
+        logger.exception('Failed to send email to %s', to_email)
+        return False
 
 
 def send_email_record(email_record, immediate: bool = True):
@@ -18,7 +54,9 @@ def send_email_record(email_record, immediate: bool = True):
 
 
 def send_gmail_message(to_email: str, subject: str, body: str) -> bool:
-    """Placeholder Gmail sender used by reminder logic in local/offline tests."""
+    """Send a reminder email using the SMTP helper when credentials are present."""
+    if settings.gmail_sender and settings.gmail_app_password:
+        return send_plain_email(to_email, subject, body)
     if not settings.gmail_client_id or not settings.gmail_client_secret:
         return False
     return True
@@ -59,7 +97,7 @@ def send_action_item_reminders(action_items) -> int:
         grouped[assignee_id].append(action_item)
 
     reminder_items = 0
-    for assignee_id, items in grouped.items():
+    for items in grouped.values():
         assignee = getattr(items[0], 'assigned_to_user', None)
         if not assignee:
             continue
