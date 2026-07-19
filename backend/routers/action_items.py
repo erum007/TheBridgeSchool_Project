@@ -60,6 +60,19 @@ def update_action_item(action_item_id: int, payload: ActionItemUpdate, db: Sessi
     return serialize_action_item(action_item)
 
 
+@router.post('/{action_item_id}/complete')
+async def complete_action_item(action_item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    action_item = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user)).filter(ActionItem.id == action_item_id).first()
+    if not action_item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Action item not found')
+    if current_user.role != UserRole.admin and action_item.assigned_to != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
+    action_item.status = ActionItemStatus.done
+    db.commit()
+    db.refresh(action_item)
+    return serialize_action_item(action_item)
+
+
 @router.delete('/{action_item_id}')
 def delete_action_item(action_item_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin))):
     action_item = db.get(ActionItem, action_item_id)
