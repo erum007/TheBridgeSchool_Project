@@ -36,23 +36,12 @@ class Settings:
 
     @property
     def sqlalchemy_url(self) -> str:
-        if self.database_url:
-            return self.database_url
-
-        from urllib.parse import quote_plus
-        
-        user_part = quote_plus(self.db_user)
-        pass_part = f":{quote_plus(self.db_password)}" if self.db_password else ""
-        
-        base_url = f"mysql+pymysql://{user_part}{pass_part}@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4"
-        if self.db_ssl_ca:
-            ca_path = Path(self.db_ssl_ca)
-            if not ca_path.is_absolute():
-                resolved_path = Path(__file__).parent / ca_path
-                if resolved_path.exists():
-                    ca_path = resolved_path
-            base_url += f"&ssl_ca={ca_path.as_posix()}"
-        return base_url
+        database_url = self.database_url or os.getenv('DATABASE_URL', '')
+        if database_url:
+            return database_url
+        raise RuntimeError(
+            'DATABASE_URL is not set. Configure the database connection string in the environment before starting the app.'
+        )
 
 
 settings = Settings()

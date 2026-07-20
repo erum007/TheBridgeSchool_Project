@@ -25,5 +25,5 @@ def apply_additive_schema_updates(engine) -> None:
             for column_name, definition in columns.items():
                 if column_name not in existing_columns:
                     connection.execute(text(f'ALTER TABLE `{table_name}` ADD COLUMN `{column_name}` {definition}'))
-        if 'users' in inspector.get_table_names():
+        if 'users' in inspector.get_table_names() and engine.dialect.name in {'mysql', 'mariadb'}:
             connection.execute(text("ALTER TABLE `users` MODIFY COLUMN `role` ENUM('admin','teacher','staff','student','parent') NOT NULL"))
