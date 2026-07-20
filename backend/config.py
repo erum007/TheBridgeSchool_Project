@@ -29,24 +29,19 @@ class Settings:
     twilio_whatsapp_number: str = os.getenv('TWILIO_WHATSAPP_NUMBER', '')
     twilio_whatsapp_reminder_content_sid: str = os.getenv('TWILIO_WHATSAPP_REMINDER_CONTENT_SID', '')
     gemini_api_key: str = os.getenv('GEMINI_API_KEY', '')
+    gemini_model: str = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
     db_ssl_ca: str = os.getenv('DB_SSL_CA', '')
+    database_url: str = os.getenv('DATABASE_URL', '')
+    demo_password: str = os.getenv('DEMO_PASSWORD', '')
 
     @property
     def sqlalchemy_url(self) -> str:
-        from urllib.parse import quote_plus
-        
-        user_part = quote_plus(self.db_user)
-        pass_part = f":{quote_plus(self.db_password)}" if self.db_password else ""
-        
-        base_url = f"mysql+pymysql://{user_part}{pass_part}@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4"
-        if self.db_ssl_ca:
-            ca_path = Path(self.db_ssl_ca)
-            if not ca_path.is_absolute():
-                resolved_path = Path(__file__).parent / ca_path
-                if resolved_path.exists():
-                    ca_path = resolved_path
-            base_url += f"&ssl_ca={ca_path.as_posix()}"
-        return base_url
+        database_url = self.database_url or os.getenv('DATABASE_URL', '')
+        if database_url:
+            return database_url
+        raise RuntimeError(
+            'DATABASE_URL is not set. Configure the database connection string in the environment before starting the app.'
+        )
 
 
 settings = Settings()

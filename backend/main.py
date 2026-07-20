@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, selectinload
 
+from .config import settings
 from .database import Base, SessionLocal, engine
 from .models import (
     ActionItem,
@@ -84,10 +85,11 @@ def _seed_demo_data(db: Session) -> None:
         existing = db.query(User).filter(User.email == email).first()
         if existing:
             return existing
+        demo_password = settings.demo_password or settings.secret_key
         user = User(
             name=name,
             email=email,
-            hashed_password=get_password_hash('password123'),
+            hashed_password=get_password_hash(demo_password),
             role=role,
             head_teacher=head_teacher,
         )

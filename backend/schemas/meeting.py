@@ -33,6 +33,11 @@ class MeetingUpdate(ORMBaseModel):
     location: Optional[str] = None
 
 
+class MeetingTranscriptRequest(ORMBaseModel):
+    transcript: str
+    notes: Optional[str] = None
+
+
 class MeetingRead(ORMBaseModel):
     id: int
     title: str
