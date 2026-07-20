@@ -362,12 +362,12 @@ const quillModules = {
   },
   blotFormatter: {},
 };
-  useEffect(() => {
-    const selectedTemplate = templates.find((template) => String(template.id) === String(compose.template_id))
-    if (selectedTemplate) {
-      setCompose((current) => ({ ...current, subject: selectedTemplate.subject, body: selectedTemplate.body }))
-    }
-  }, [compose.template_id, templates])
+  // useEffect(() => {
+  //   const selectedTemplate = templates.find((template) => String(template.id) === String(compose.template_id))
+  //   if (selectedTemplate) {
+  //     setCompose((current) => ({ ...current, subject: selectedTemplate.subject, body: selectedTemplate.body }))
+  //   }
+  // }, [compose.template_id, templates])
 
   const submitCompose = async (event) => {
     event.preventDefault()
@@ -507,10 +507,33 @@ const quillModules = {
                 </div>
                 <div>
                   <label className="portal-label block">Template</label>
-                  <select className="portal-input mt-1" value={compose.template_id} onChange={(event) => setCompose({ ...compose, template_id: event.target.value })}>
+                  <select
+                    className="portal-input mt-1"
+                    value={compose.template_id}
+                    
+                    onChange={(e) => {
+                        const id = e.target.value;
+
+                        const template = templates.find(
+                            (t) => String(t.id) === id
+                        );
+
+                        setCompose((current) => ({
+                            ...current,
+                            template_id: id,
+                            subject: template ? template.subject : "",
+                            body: template ? template.body : "",
+                        }));
+                    }}
+                >
                     <option value="">None</option>
-                    {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
-                  </select>
+
+                    {templates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                            {template.name}
+                        </option>
+                    ))}
+                </select>
                 </div>
                 <div>
                   <label className="portal-label block">Subject</label>
@@ -521,9 +544,21 @@ const quillModules = {
                   <input type="datetime-local" className="portal-input mt-1" value={compose.scheduled_at} onChange={(event) => setCompose({ ...compose, scheduled_at: event.target.value })} />
                 </div>
                 <div className="lg:col-span-2">
-                  <label className="portal-label block">Body</label>
-                  <textarea className="portal-input mt-1 min-h-40" value={compose.body} onChange={(event) => setCompose({ ...compose, body: event.target.value })} />
-                </div>
+                <label className="portal-label block">Body</label>
+
+                <ReactQuill
+                  theme="snow"
+                  modules={quillModules}
+                  value={compose.body}
+                  onChange={(value) =>
+                    setCompose({
+                      ...compose,
+                      body: value,
+                    })
+                  }
+                  className="email-editor"
+                />
+              </div>
                 <div className="lg:col-span-2 flex justify-end">
                   <button type="submit" className="portal-button-primary">Send</button>
                 </div>

@@ -62,7 +62,12 @@ def _schedule_delivery(email_id: int, run_at: datetime):
             sent = 0
             failed = 0
             for to_email in recipients:
-                success = send_plain_email(to_email, email_record.subject, email_record.body)
+                success = send_plain_email(
+                    to_email=to_email,
+                    subject=email_record.subject,
+                    body="Please view this email in an HTML-compatible email client.",
+                    html_body=email_record.body,
+                )
                 if success:
                     sent += 1
                 else:
@@ -107,7 +112,12 @@ def send_email(payload: EmailSendRequest, db: Session = Depends(get_db), current
     else:
         recipients = _resolve_recipients(db, payload.recipient_group)
         for to_email in recipients:
-            send_plain_email(to_email, payload.subject, payload.body)
+            send_plain_email(
+                to_email=to_email,
+                subject=payload.subject,
+                body="Please view this email in an HTML-compatible email client.",
+                html_body=payload.body,
+            )
         email_record.status = EmailStatus.sent
         email_record.sent_at = datetime.now(timezone.utc)
         db.commit()
