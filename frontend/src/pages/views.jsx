@@ -1,4 +1,10 @@
+import ReactQuill, { Quill } from "react-quill-new";
+import "react-quill-new/dist/quill.snow.css";
+import BlotFormatter from "@enzedonline/quill-blot-formatter2";
+Quill.register("modules/blotFormatter", BlotFormatter);
 import { useEffect, useMemo, useState } from 'react'
+import { useRef } from "react";
+import axios from "axios";
 import { format, formatDistanceToNow, parseISO } from 'date-fns'
 import {
   BookOpen,
@@ -45,7 +51,6 @@ import StatCard from '../components/shared/StatCard.jsx'
 import Tabs from '../components/shared/Tabs.jsx'
 import Table from '../components/shared/Table.jsx'
 import CreateMeetingModal from '../components/shared/CreateMeetingModal.jsx'
-
 const formatDate = (value, pattern = 'PPP') => (value ? format(parseISO(value), pattern) : '—')
 
 function useMeetingData() {
@@ -286,11 +291,77 @@ export function EmailModuleView() {
   const [tab, setTab] = useState('dashboard')
   const [compose, setCompose] = useState({ recipient_group: 'parents', individual_email: '', template_id: '', subject: '', body: '', scheduled_at: '' })
   const [templateForm, setTemplateForm] = useState({ name: '', subject: '', body: '' })
-
+  const [editingTemplateId, setEditingTemplateId] = useState(null);
   const draftEmails = emails.filter((item) => item.status === 'draft')
   const scheduledEmails = emails.filter((item) => item.status === 'scheduled')
   const sentEmails = emails.filter((item) => item.status === 'sent')
+  const quillRef = useRef(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const imageHandler = () => {
+  const input = document.createElement("input");
+  
 
+  input.setAttribute("type", "file");
+  input.setAttribute("accept", "image/*");
+
+  input.click();
+
+  input.onchange = async () => {
+    const file = input.files[0];
+
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await axios.post(
+        "http://localhost:8000/api/upload-image",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      const imageUrl = response.data.url;
+
+      const editor = quillRef.current.getEditor();
+
+      const range = editor.getSelection(true);
+
+      editor.insertEmbed(range.index, "image", imageUrl);
+    } catch (err) {
+      console.error(err);
+      alert("Image upload failed.");
+    }
+  };
+};
+const quillModules = {
+  toolbar: {
+    container: [
+      [{ header: [1, 2, 3, false] }],
+
+      ["bold", "italic", "underline"],
+
+      [{ color: [] }, { background: [] }],
+
+      [{ list: "ordered" }, { list: "bullet" }],
+
+      [{ align: [] }],
+
+      ["link", "image"],
+
+      ["clean"],
+    ],
+
+    handlers: {
+      image: imageHandler,
+    },
+  },
+  blotFormatter: {},
+};
   useEffect(() => {
     const selectedTemplate = templates.find((template) => String(template.id) === String(compose.template_id))
     if (selectedTemplate) {
@@ -326,17 +397,43 @@ export function EmailModuleView() {
   const submitTemplate = async (event) => {
     event.preventDefault()
     try {
-      await emailsApi.createTemplate(templateForm)
-      toast.success('Template created')
-      setTemplateForm({ name: '', subject: '', body: '' })
-      refetchTemplates()
+      if (editingTemplateId) {
+
+        await emailsApi.updateTemplate(
+            editingTemplateId,
+            templateForm
+        );
+
+        toast.success("Template updated");
+
+    } else {
+
+        await emailsApi.createTemplate(templateForm);
+
+        toast.success("Template created");
+
+    }
+
+    setEditingTemplateId(null);
+
+    setTemplateForm({
+        name: "",
+        subject: "",
+        body: "",
+    });
+
+    refetchTemplates();
     } catch (error) {
+      console.log(error)
+      console.log(error.response)
+      console.log(error.response?.data)
+      
       toast.error(error?.response?.data?.detail || 'Could not create template')
     }
   }
 
   return (
-    <div>
+    <div className="rounded-xl border border-[var(--border-default)] bg-white p-6 shadow-sm">
       <PageHeader title="Email Module" subtitle="Compose, schedule, and manage templates." />
       <Tabs
         tabs={[
@@ -442,10 +539,50 @@ export function EmailModuleView() {
                   data={templates}
                   loading={false}
                   columns={[
-                    { key: 'name', label: 'Name' },
-                    { key: 'subject', label: 'Subject Preview' },
-                    { key: 'created_by_name', label: 'Created By' },
-                  ]}
+                  { key: "name", label: "Name" },
+                  { key: "subject", label: "Subject Preview" },
+                  { key: "created_by_name", label: "Created By" },
+
+                  {
+                    key: "actions",
+                    label: "Actions",
+                    render: (row) => (
+                      <div className="flex gap-2">
+                       <button
+                        onClick={() => {
+
+                            setEditingTemplateId(row.id);
+
+                            setTemplateForm({
+                                name: row.name,
+                                subject: row.subject,
+                                body: row.body,
+                            });
+
+                        }}
+                      >
+                        Edit
+                    </button>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!window.confirm("Delete this template?")) return;
+
+                            await emailsApi.deleteTemplate(row.id);
+
+                            toast.success("Template deleted");
+
+                            refetchTemplates();
+                          }}
+                          className="text-red-600 hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ),
+                  },
+                ]}
                   emptyMessage="No templates created yet."
                 />
                 <form className="space-y-4 portal-panel" onSubmit={submitTemplate}>
@@ -457,17 +594,105 @@ export function EmailModuleView() {
                     <label className="portal-label block">Subject</label>
                     <input className="portal-input mt-1" value={templateForm.subject} onChange={(event) => setTemplateForm({ ...templateForm, subject: event.target.value })} />
                   </div>
-                  <div>
+                  {/* <div>
                     <label className="portal-label block">Body</label>
                     <textarea className="portal-input mt-1 min-h-44" placeholder="Use [Student Name], [Date] placeholders." value={templateForm.body} onChange={(event) => setTemplateForm({ ...templateForm, body: event.target.value })} />
-                  </div>
-                  <button type="submit" className="portal-button-primary">Create Template</button>
+                  </div> */}
+                  <div>
+                  <label className="portal-label block">Body</label>
+
+                  <div className="mt-2">
+                    <ReactQuill
+                    ref={quillRef}
+                    theme="snow"
+                    modules={quillModules}
+                    value={templateForm.body}
+                    onChange={(value) =>
+                      setTemplateForm({
+                        ...templateForm,
+                        body: value,
+                      })
+                    }
+                    className="email-editor"
+                />
+                </div>
+              </div>
+                  {/* <button type="submit" className="portal-button-primary">Create Template</button>
+                   */}
+                 <div className="flex gap-3">
+
+                  <button
+                    type="submit"
+                    className="portal-button-primary"
+                  >
+                    {editingTemplateId
+                      ? "Update Template"
+                      : "Create Template"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="portal-button-secondary"
+                    onClick={() => setPreviewOpen(true)}
+                  >
+                    Preview
+                  </button>
+
+                </div>
+                    {editingTemplateId && (
+                  <button
+                      type="button" className="portal-button-primary"
+                      onClick={() => {
+
+                          setEditingTemplateId(null);
+
+                          setTemplateForm({
+                              name: "",
+                              subject: "",
+                              body: "",
+                          });
+
+                      }}
+                  >
+                      Cancel
+                  </button>
+              )}
                 </form>
               </div>
             ),
           },
         ]}
       />
+      <Modal
+    isOpen={previewOpen}
+    onClose={() => setPreviewOpen(false)}
+    title="Email Preview"
+>
+    <div className="space-y-4">
+
+        <div className="border-b pb-4">
+            <p>
+                <strong>From:</strong> school@bridge.edu
+            </p>
+
+            <p>
+                <strong>To:</strong> Parents
+            </p>
+
+            <p>
+                <strong>Subject:</strong> {templateForm.subject}
+            </p>
+        </div>
+
+        <div
+            className="prose max-w-none"
+            dangerouslySetInnerHTML={{
+                __html: templateForm.body,
+            }}
+        />
+
+    </div>
+</Modal>
     </div>
   )
 }

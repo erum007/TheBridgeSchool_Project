@@ -203,3 +203,41 @@ button:disabled {
 input[type='checkbox'] {
   accent-color: var(--brand-red);
 }
+.email-editor {
+    margin-top: 12px;
+}
+
+.email-editor .ql-toolbar {
+    border-radius: 12px 12px 0 0;
+    border: 1px solid #d9d9d9;
+    background: #fafafa;
+    padding: 10px;
+}
+
+.email-editor .ql-container {
+    border-radius: 0 0 12px 12px;
+    border: 1px solid #d9d9d9;
+    min-height: 350px;
+    font-size: 15px;
+}
+
+.email-editor .ql-editor {
+    min-height: 350px;
+    padding: 18px;
+    line-height: 1.7;
+}
+
+.email-editor .ql-toolbar button:hover {
+    background: #eef5ff;
+    border-radius: 6px;
+}
+
+.email-editor .ql-toolbar button.ql-active {
+    background: #d9e9ff;
+    border-radius: 6px;
+}
+
+.email-editor .ql-picker-options {
+    border-radius: 8px;
+}
+

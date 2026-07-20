@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, selectinload
 
@@ -49,6 +50,11 @@ from .services.schema_migration_service import apply_additive_schema_updates
 
 
 app = FastAPI(title='Bridge School Portal API')
+app.mount(
+    "/uploads",
+    StaticFiles(directory="uploads"),
+    name="uploads"
+)
 
 app.add_middleware(
     CORSMiddleware,
