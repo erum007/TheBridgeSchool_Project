@@ -7,6 +7,7 @@ export const emailsApi = {
   remove: (id) => api.delete(`/api/emails/${id}`),
   templates: () => api.get('/api/email-templates'),
   createTemplate: (payload) => api.post('/api/email-templates', payload),
-  removeTemplate: (id) => api.delete(`/api/email-templates/${id}`),
+  deleteTemplate: (id) => api.delete(`/api/email-templates/${id}`),
+  updateTemplate: (id, data) => api.put(`/api/email-templates/${id}`, data),
 }
 

@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import UploadFile, File
+import uuid
+import os
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import SessionLocal
@@ -172,3 +175,50 @@ def delete_template(template_id: int, db: Session = Depends(get_db), current_use
     db.delete(template)
     db.commit()
     return {'detail': 'Template deleted'}
+
+UPLOAD_FOLDER = "uploads"
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+@router.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    extension = file.filename.split(".")[-1]
+
+    filename = f"{uuid.uuid4()}.{extension}"
+
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+    with open(filepath, "wb") as buffer:
+        buffer.write(await file.read())
+
+    return {
+        "url": f"http://localhost:8000/uploads/{filename}"
+    }
+
+@router.put("/email-templates/{template_id}")
+def update_template(
+    template_id: int,
+    payload: EmailTemplateCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    template = db.get(EmailTemplate, template_id)
+
+    if not template:
+        raise HTTPException(404, "Template not found")
+
+    if (
+        current_user.role != UserRole.admin
+        and template.created_by != current_user.id
+    ):
+        raise HTTPException(403, "Insufficient permissions")
+
+    template.name = payload.name
+    template.subject = payload.subject
+    template.body = payload.body
+
+    db.commit()
+    db.refresh(template)
+
+    return serialize_email_template(template)
