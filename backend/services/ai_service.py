@@ -84,17 +84,27 @@ def _build_gemini_client() -> genai.Client:
     return genai.Client(api_key=settings.gemini_api_key)
 
 
+def _build_generate_content_config(response_mime_type: str | None = None) -> Any:
+    """Build a Gemini config object compatible with the installed SDK version."""
+    config_kwargs: dict[str, Any] = {}
+    if response_mime_type:
+        config_kwargs['response_mime_type'] = response_mime_type
+
+    try:
+        return types.GenerateContentConfig(**config_kwargs, thinking_config={'thinking_level': 'low'})
+    except Exception:
+        return types.GenerateContentConfig(**config_kwargs)
+
+
 def _call_gemini_model(prompt: str, response_mime_type: str | None = None) -> str:
     """Send a prompt to Gemini and return the text response body."""
     client = _build_gemini_client()
-    config_kwargs: dict[str, Any] = {'thinking_config': {'thinking_level': 'low'}}
-    if response_mime_type:
-        config_kwargs['response_mime_type'] = response_mime_type
+    config = _build_generate_content_config(response_mime_type)
     try:
         response = client.models.generate_content(
             model='gemini-3.1-flash-lite',
             contents=prompt,
-            config=types.GenerateContentConfig(**config_kwargs),
+            config=config,
         )
     except Exception as exc:
         raise AIServiceError(f'Gemini API request failed: {exc}') from exc
