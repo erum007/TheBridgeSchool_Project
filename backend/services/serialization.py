@@ -21,12 +21,15 @@ def serialize_user(user):
         'role': user.role.value if hasattr(user.role, 'value') else user.role,
         'head_teacher': user.head_teacher,
         'whatsapp_number': user.whatsapp_number,
+        'department': user.department,
+        'departments': [department.name for department in getattr(user, 'departments', [])],
         'is_active': user.is_active,
         'created_at': iso(user.created_at),
     }
 
 
 def serialize_action_item(action_item):
+    reminder = getattr(action_item, 'whatsapp_reminder', None)
     return {
         'id': action_item.id,
         'meeting_id': action_item.meeting_id,
@@ -36,6 +39,21 @@ def serialize_action_item(action_item):
         'status': action_item.status.value if hasattr(action_item.status, 'value') else action_item.status,
         'due_date': iso(action_item.due_date),
         'created_at': iso(action_item.created_at),
+        'whatsapp_reminder': {
+            'frequency': reminder.frequency,
+            'run_at': iso(reminder.run_at),
+            'is_active': reminder.is_active,
+            'last_sent_at': iso(reminder.last_sent_at),
+        } if reminder else None,
+    }
+
+
+def serialize_department(department):
+    return {
+        'id': department.id,
+        'name': department.name,
+        'members': [serialize_user(member) for member in getattr(department, 'members', [])],
+        'created_at': iso(department.created_at),
     }
 
 
@@ -47,6 +65,10 @@ def serialize_meeting(meeting, include_nested=True):
         'department': meeting.department,
         'status': meeting.status.value if hasattr(meeting.status, 'value') else meeting.status,
         'notes': meeting.notes,
+        'agenda': meeting.agenda,
+        'meeting_mode': meeting.meeting_mode,
+        'meeting_link': meeting.meeting_link,
+        'location': meeting.location,
         'ai_summary': getattr(meeting, 'ai_summary', None),
         'created_by': meeting.created_by,
         'created_at': iso(meeting.created_at),

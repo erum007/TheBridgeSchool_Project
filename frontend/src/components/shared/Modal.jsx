@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
-export default function Modal({ isOpen, onClose, title, children, footer }) {
+export default function Modal({ isOpen, onClose, title, children, footer, size = 'default' }) {
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === 'Escape') {
@@ -23,7 +23,7 @@ export default function Modal({ isOpen, onClose, title, children, footer }) {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(27,43,107,0.2)] px-4 backdrop-blur-[2px]" onMouseDown={onClose}>
       <div
-        className="w-full max-w-lg scale-100 rounded-2xl border border-[var(--border-default)] bg-white opacity-100 transition-all duration-150 ease-out"
+        className={`w-full ${size === 'large' ? 'max-w-3xl' : 'max-w-lg'} scale-100 rounded-2xl border border-[var(--border-default)] bg-white opacity-100 transition-all duration-150 ease-out`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="border-b border-[#f0f2f8] px-6 pb-4 pt-6">

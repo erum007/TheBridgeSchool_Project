@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, selectinload
 
@@ -10,6 +11,8 @@ from .database import Base, SessionLocal, engine
 from .models import (
     ActionItem,
     ActionItemStatus,
+    ActionItemWhatsAppReminder,
+    Department,
     EmailStatus,
     EmailTemplate,
     Meeting,
@@ -31,6 +34,7 @@ from .routers import (
     ai_router,
     auth_router,
     dashboard_router,
+    departments_router,
     emails_router,
     meetings_router,
     notices_router,
@@ -41,9 +45,16 @@ from .routers import (
 )
 from .services.auth_service import get_password_hash
 from .services.scheduler_service import ensure_scheduler_started
+from .services.action_item_whatsapp_reminder_service import restore_reminders
+from .services.schema_migration_service import apply_additive_schema_updates
 
 
 app = FastAPI(title='Bridge School Portal API')
+app.mount(
+    "/uploads",
+    StaticFiles(directory="uploads"),
+    name="uploads"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,6 +75,7 @@ app.include_router(notices_router)
 app.include_router(opportunities_router)
 app.include_router(whatsapp_router)
 app.include_router(dashboard_router)
+app.include_router(departments_router)
 app.include_router(ai_router)
 
 
@@ -174,13 +186,32 @@ def _seed_demo_data(db: Session) -> None:
     db.commit()
 
 
+def _backfill_department_memberships(db: Session) -> None:
+    legacy_users = db.query(User).filter(User.department.isnot(None)).all()
+    for user in legacy_users:
+        name = user.department.strip() if user.department else ''
+        if not name:
+            continue
+        department = db.query(Department).filter(Department.name == name).first()
+        if not department:
+            department = Department(name=name)
+            db.add(department)
+            db.flush()
+        if department not in user.departments:
+            user.departments.append(department)
+    db.commit()
+
+
 @app.on_event('startup')
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
+    apply_additive_schema_updates(engine)
     ensure_scheduler_started()
+    restore_reminders()
     db = SessionLocal()
     try:
         _seed_demo_data(db)
+        _backfill_department_memberships(db)
     finally:
         db.close()
 

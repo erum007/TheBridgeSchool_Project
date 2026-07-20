@@ -8,17 +8,22 @@ from .common import ORMBaseModel
 
 
 class UserCreate(ORMBaseModel):
-    name: str
-    email: str
-    password: str = Field(min_length=6)
-    role: str
+    name: str = Field(min_length=1)
+    email: str = Field(min_length=3)
+    password: str = Field(min_length=12)
+    role: str = Field(min_length=1)
     head_teacher: bool = False
     whatsapp_number: Optional[str] = None
+    department: Optional[str] = None
     is_active: bool = True
 
 
 class UserUpdateSettings(ORMBaseModel):
     whatsapp_number: Optional[str] = None
+
+
+class UserAdminUpdate(ORMBaseModel):
+    department: Optional[str] = None
 
 
 class UserRead(ORMBaseModel):
@@ -28,5 +33,6 @@ class UserRead(ORMBaseModel):
     role: str
     head_teacher: bool
     whatsapp_number: Optional[str] = None
+    department: Optional[str] = None
     is_active: bool
     created_at: str

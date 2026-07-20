@@ -13,6 +13,7 @@ const adminNav = [
     { to: '/admin/results', label: 'Performance Broadcaster', icon: Trophy },
     { to: '/admin/whatsapp', label: 'WhatsApp Alerts', icon: MessageSquareMore },
     { to: '/admin/portal', label: 'Portal Management', icon: Users },
+    { to: '/admin/settings', label: 'Settings', icon: Users },
   ] },
 ]
 
@@ -26,6 +27,14 @@ const teacherNav = [
     { to: '/teacher/meetings', label: 'Meeting Workspace', icon: CalendarDays },
     { to: '/teacher/results', label: 'Performance Broadcaster', icon: Trophy },
     { to: '/teacher/broadcast', label: 'Broadcaster', icon: Megaphone },
+    { to: '/teacher/settings', label: 'Settings', icon: Users },
+  ] },
+]
+
+const staffNav = [
+  { label: 'Staff', items: [
+    { to: '/staff/dashboard', label: 'Dashboard', icon: Shield },
+    { to: '/staff/settings', label: 'Settings', icon: Users },
   ] },
 ]
 
@@ -57,6 +66,7 @@ export function AppLayout({ children }) {
 
   const navGroups = useMemo(() => {
     if (role === 'teacher') return teacherNav
+    if (role === 'staff') return staffNav
     if (role === 'student') return studentNav
     if (role === 'parent') return parentNav
     return adminNav

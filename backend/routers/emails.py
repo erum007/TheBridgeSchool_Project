@@ -3,13 +3,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import UploadFile, File
+import uuid
+import os
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import SessionLocal
 from ..dependencies import get_current_user, get_db, require_roles
 from ..models import EmailStatus, EmailTemplate, ScheduledEmail, User, UserRole
 from ..schemas import EmailSendRequest, EmailTemplateCreate, ScheduledEmailCreate
-from ..services.email_service import send_email_record
+from ..services.email_service import send_email_record, send_plain_email
 from ..services.scheduler_service import ensure_scheduler_started
 from ..services.serialization import serialize_email_template, serialize_scheduled_email
 
@@ -23,6 +26,29 @@ def _parse_datetime(value: str | None):
     return datetime.fromisoformat(value.replace('Z', '+00:00'))
 
 
+def _resolve_recipients(db: Session, recipient_group: str) -> list[str]:
+    """
+    Resolve recipient_group to a list of email addresses.
+    recipient_group can be: 'all_parents', 'all_students', 'all_teachers',
+    'all', or a raw email address.
+    """
+    role_map = {
+        'all_parents': UserRole.parent,
+        'all_students': UserRole.student,
+        'all_teachers': UserRole.teacher,
+    }
+    if recipient_group in role_map:
+        users = db.query(User).filter(
+            User.role == role_map[recipient_group],
+            User.is_active == True,
+        ).all()
+        return [user.email for user in users if user.email]
+    if recipient_group == 'all':
+        users = db.query(User).filter(User.is_active == True).all()
+        return [user.email for user in users if user.email]
+    return [recipient_group]
+
+
 def _schedule_delivery(email_id: int, run_at: datetime):
     scheduler = ensure_scheduler_started()
 
@@ -32,9 +58,20 @@ def _schedule_delivery(email_id: int, run_at: datetime):
             email_record = db.get(ScheduledEmail, email_id)
             if not email_record:
                 return
+            recipients = _resolve_recipients(db, email_record.recipient_group)
+            sent = 0
+            failed = 0
+            for to_email in recipients:
+                success = send_plain_email(to_email, email_record.subject, email_record.body)
+                if success:
+                    sent += 1
+                else:
+                    failed += 1
             email_record.status = EmailStatus.sent
             email_record.sent_at = datetime.now(timezone.utc)
             db.commit()
+        except Exception:
+            pass
         finally:
             db.close()
 
@@ -63,12 +100,16 @@ def send_email(payload: EmailSendRequest, db: Session = Depends(get_db), current
     db.add(email_record)
     db.flush()
     if payload.scheduled_at:
-        send_email_record(email_record, immediate=False)
+        email_record.status = EmailStatus.scheduled
         db.commit()
         db.refresh(email_record)
         _schedule_delivery(email_record.id, email_record.scheduled_at)
     else:
-        send_email_record(email_record, immediate=True)
+        recipients = _resolve_recipients(db, payload.recipient_group)
+        for to_email in recipients:
+            send_plain_email(to_email, payload.subject, payload.body)
+        email_record.status = EmailStatus.sent
+        email_record.sent_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(email_record)
     return serialize_scheduled_email(email_record)
@@ -134,3 +175,50 @@ def delete_template(template_id: int, db: Session = Depends(get_db), current_use
     db.delete(template)
     db.commit()
     return {'detail': 'Template deleted'}
+
+UPLOAD_FOLDER = "uploads"
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+@router.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    extension = file.filename.split(".")[-1]
+
+    filename = f"{uuid.uuid4()}.{extension}"
+
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+    with open(filepath, "wb") as buffer:
+        buffer.write(await file.read())
+
+    return {
+        "url": f"http://localhost:8000/uploads/{filename}"
+    }
+
+@router.put("/email-templates/{template_id}")
+def update_template(
+    template_id: int,
+    payload: EmailTemplateCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    template = db.get(EmailTemplate, template_id)
+
+    if not template:
+        raise HTTPException(404, "Template not found")
+
+    if (
+        current_user.role != UserRole.admin
+        and template.created_by != current_user.id
+    ):
+        raise HTTPException(403, "Insufficient permissions")
+
+    template.name = payload.name
+    template.subject = payload.subject
+    template.body = payload.body
+
+    db.commit()
+    db.refresh(template)
+
+    return serialize_email_template(template)
