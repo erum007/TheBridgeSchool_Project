@@ -47,6 +47,7 @@ def _resolve_assignee_id(db: Session, owner: str | None, fallback_id: int) -> in
 
 
 @router.post('/{meeting_id}/summarise')
+@router.post('/{meeting_id}/summarize')
 async def summarise_meeting(meeting_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     meeting = db.get(Meeting, meeting_id)
     if not meeting:

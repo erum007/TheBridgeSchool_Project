@@ -56,6 +56,16 @@ def test_generate_meeting_workspace_raises_clear_error_for_malformed_json():
             asyncio.run(ai_service.generate_meeting_workspace('A meeting transcript'))
 
 
+def test_generate_meeting_workspace_returns_empty_payload_for_blank_response():
+    with patch('backend.services.ai_service.genai.Client') as mock_client_cls:
+        mock_client = mock_client_cls.return_value
+        mock_client.models.generate_content.return_value = SimpleNamespace(text='   ')
+
+        result = asyncio.run(ai_service.generate_meeting_workspace('A meeting transcript'))
+
+    assert result == {'summary': '', 'key_decisions': [], 'action_items': []}
+
+
 def test_send_action_item_reminders_filters_due_items_and_skips_completed():
     today = date.today()
     assignee = SimpleNamespace(id=2, name='Nadia', email='nadia@example.com')

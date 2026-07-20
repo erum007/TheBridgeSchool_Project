@@ -31,9 +31,14 @@ class Settings:
     gemini_api_key: str = os.getenv('GEMINI_API_KEY', '')
     gemini_model: str = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
     db_ssl_ca: str = os.getenv('DB_SSL_CA', '')
+    database_url: str = os.getenv('DATABASE_URL', '')
+    demo_password: str = os.getenv('DEMO_PASSWORD', '')
 
     @property
     def sqlalchemy_url(self) -> str:
+        if self.database_url:
+            return self.database_url
+
         from urllib.parse import quote_plus
         
         user_part = quote_plus(self.db_user)

@@ -8,6 +8,9 @@ from typing import Any
 from google import genai
 from google.genai import types
 
+
+DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite'
+
 from ..config import settings
 
 
@@ -43,6 +46,9 @@ def parse_ai_response(raw_response: str | dict[str, Any] | None) -> dict[str, An
         except json.JSONDecodeError as exc:
             raise AIServiceError(f'Malformed JSON response from AI service: {cleaned_text}') from exc
 
+    if not isinstance(payload, dict):
+        raise AIServiceError('AI service returned an unexpected response shape.')
+
     summary = payload.get('summary') or payload.get('meeting_summary') or ''
     decisions = payload.get('key_decisions') or payload.get('decisions') or []
     action_items = payload.get('action_items') or payload.get('actions') or []
@@ -60,11 +66,14 @@ def parse_ai_response(raw_response: str | dict[str, Any] | None) -> dict[str, An
     normalized_actions: list[dict[str, Any]] = []
     for item in action_items:
         if isinstance(item, dict):
+            task = item.get('task') or item.get('description') or item.get('title') or ''
+            owner = item.get('owner') or item.get('assigned_to') or ''
+            due_date = item.get('due_date') or item.get('date') or None
             normalized_actions.append(
                 {
-                    'task': item.get('task') or item.get('description') or item.get('title') or '',
-                    'owner': item.get('owner') or item.get('assigned_to') or '',
-                    'due_date': item.get('due_date') or item.get('date') or None,
+                    'task': str(task).strip(),
+                    'owner': str(owner).strip(),
+                    'due_date': str(due_date).strip() if due_date is not None else None,
                 }
             )
         elif isinstance(item, str) and item.strip():
@@ -102,10 +111,12 @@ def _call_gemini_model(prompt: str, response_mime_type: str | None = None) -> st
     config = _build_generate_content_config(response_mime_type)
     try:
         response = client.models.generate_content(
-            model='gemini-3.1-flash-lite',
+            model=DEFAULT_GEMINI_MODEL,
             contents=prompt,
             config=config,
         )
+    except TimeoutError as exc:
+        raise AIServiceError('Gemini API request timed out while processing the request.') from exc
     except Exception as exc:
         raise AIServiceError(f'Gemini API request failed: {exc}') from exc
 
@@ -127,7 +138,10 @@ def generate_meeting_summary(notes: str | None) -> str:
         return 'No notes were captured for this meeting.'
 
     prompt = 'Summarise these meeting notes in 3 concise bullet points:\n' + text
-    summary = _call_gemini_model(prompt)
+    try:
+        summary = _call_gemini_model(prompt)
+    except AIServiceError as exc:
+        return f'Summary unavailable: {exc}'
     return summary or f'Summary: {text[:240]}'
 
 
