@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 
 def iso(value):
@@ -58,12 +58,14 @@ def serialize_department(department):
 
 
 def serialize_meeting(meeting, include_nested=True):
+    stored_status = meeting.status.value if hasattr(meeting.status, 'value') else meeting.status
+    status = _display_meeting_status(stored_status, meeting.scheduled_at)
     payload = {
         'id': meeting.id,
         'title': meeting.title,
         'scheduled_at': iso(meeting.scheduled_at),
         'department': meeting.department,
-        'status': meeting.status.value if hasattr(meeting.status, 'value') else meeting.status,
+        'status': status,
         'notes': meeting.notes,
         'agenda': meeting.agenda,
         'meeting_mode': meeting.meeting_mode,
@@ -77,6 +79,21 @@ def serialize_meeting(meeting, include_nested=True):
         payload['attendees'] = [serialize_user(user) for user in getattr(meeting, 'attendees', [])]
         payload['action_items'] = [serialize_action_item(action_item) for action_item in getattr(meeting, 'action_items', [])]
     return payload
+
+
+def _display_meeting_status(stored_status, scheduled_at):
+    """Return the status used by clients without mutating the persisted meeting."""
+    status = str(stored_status or '')
+    if status == 'cancelled' or not isinstance(scheduled_at, datetime):
+        return status
+
+    comparison_time = scheduled_at
+    if comparison_time.tzinfo is None:
+        comparison_time = comparison_time.replace(tzinfo=timezone.utc)
+
+    if comparison_time < datetime.now(timezone.utc):
+        return 'past'
+    return status
 
 
 def serialize_email_template(template):

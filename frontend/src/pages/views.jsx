@@ -85,14 +85,16 @@ export function AdminDashboardView() {
 
 export function MeetingWorkspaceView({ canCreateMeeting }) {
   const { user } = useAuth()
-  const { data: meetings = [], loading: meetingsLoading, refetch: refetchMeetings } = useApi(() => meetingsApi.list(), [])
-  const { data: actionItems = [], loading: actionItemsLoading, refetch: refetchActions } = useApi(() => actionItemsApi.list(), [])
-  const { data: users = [] } = useApi(() => usersApi.list(), [])
+  const { data: meetings = [], loading: meetingsLoading, error: meetingsError, refetch: refetchMeetings } = useApi(() => meetingsApi.list(), [])
+  const { data: actionItems = [], loading: actionItemsLoading, error: actionItemsError, refetch: refetchActions } = useApi(() => actionItemsApi.list(), [])
+  const { data: users = [], error: usersError } = useApi(() => usersApi.list(), [])
   const [meetingModalOpen, setMeetingModalOpen] = useState(false)
   const [selectedPastMeeting, setSelectedPastMeeting] = useState(null)
   const [notes, setNotes] = useState('')
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summary, setSummary] = useState('')
+  const [keyDecisions, setKeyDecisions] = useState([])
+  const [generatedActionItems, setGeneratedActionItems] = useState([])
   const [assigneeFilter, setAssigneeFilter] = useState('all')
   const [actionForm, setActionForm] = useState({ meeting_id: '', description: '', assigned_to: '', due_date: '', whatsapp_reminder_frequency: 'none', whatsapp_reminder_at: '' })
 
@@ -102,6 +104,18 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     if (assigneeFilter === 'all') return actionItems
     return actionItems.filter((item) => String(item.assigned_to) === String(assigneeFilter))
   }, [actionItems, assigneeFilter])
+
+  useEffect(() => {
+    if (meetingsError) console.error('Failed to load meetings for the workspace', meetingsError)
+  }, [meetingsError])
+
+  useEffect(() => {
+    if (actionItemsError) console.error('Failed to load workspace action items', actionItemsError)
+  }, [actionItemsError])
+
+  useEffect(() => {
+    if (usersError) console.error('Failed to load workspace users', usersError)
+  }, [usersError])
 
   useEffect(() => {
     if (!selectedPastMeeting && pastMeetings.length) {
@@ -120,24 +134,42 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   }, [selectedPastMeeting, pastMeetings])
 
   const saveNotes = async () => {
-    if (!selectedPastMeeting) return
+    if (!selectedPastMeeting) {
+      toast.error('Select a past meeting before saving notes')
+      return
+    }
     try {
       await meetingsApi.update(selectedPastMeeting, { notes })
       toast.success('Notes saved')
       refetchMeetings()
     } catch (error) {
+      console.error('Failed to save meeting notes', error)
       toast.error(error?.response?.data?.detail || 'Could not save notes')
     }
   }
 
   const generateSummary = async () => {
-    if (!selectedPastMeeting) return
+    if (!selectedPastMeeting) {
+      toast.error('Select a past meeting before generating an AI summary')
+      return
+    }
+    const transcript = notes.trim()
+    if (!transcript) {
+      toast.error('Add meeting notes before generating an AI summary')
+      return
+    }
     setSummaryLoading(true)
     try {
-      const response = await meetingsApi.summarise(selectedPastMeeting)
-      setSummary(response.data.summary)
-      toast.success('AI summary generated')
+      const response = await meetingsApi.generateAiWorkspace(selectedPastMeeting, { transcript, notes: transcript })
+      const result = response.data || {}
+      setSummary(typeof result.summary === 'string' ? result.summary : '')
+      setKeyDecisions(Array.isArray(result.key_decisions) ? result.key_decisions : [])
+      setGeneratedActionItems(Array.isArray(result.action_items) ? result.action_items : [])
+      refetchMeetings()
+      refetchActions()
+      toast.success('AI workspace generated')
     } catch (error) {
+      console.error('Failed to generate AI meeting workspace', error)
       toast.error(error?.response?.data?.detail || 'Could not generate summary')
     } finally {
       setSummaryLoading(false)
@@ -160,6 +192,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
       refetchActions()
       toast.success('Action item updated')
     } catch (error) {
+      console.error('Failed to update action item status', error)
       toast.error(error?.response?.data?.detail || 'Could not update action item')
     }
   }
@@ -172,6 +205,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
       refetchActions()
       toast.success('Action item created')
     } catch (error) {
+      console.error('Failed to create action item', error)
       toast.error(error?.response?.data?.detail || 'Could not create action item')
     }
   }
@@ -206,7 +240,11 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
               <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
                 <div className="rounded-xl border border-[var(--border-default)] bg-white p-4">
                   <label className="portal-label block">Past meetings</label>
-                  <select className="portal-input mt-1" value={selectedPastMeeting || ''} onChange={(event) => setSelectedPastMeeting(event.target.value)}>
+                  <select className="portal-input mt-1" value={selectedPastMeeting || ''} onChange={(event) => {
+                    setSelectedPastMeeting(event.target.value)
+                    setKeyDecisions([])
+                    setGeneratedActionItems([])
+                  }}>
                     {pastMeetings.map((meeting) => <option key={meeting.id} value={meeting.id}>{meeting.title}</option>)}
                   </select>
                   <div className="mt-4 text-sm text-[var(--text-secondary)]">
@@ -223,7 +261,27 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                     <button type="button" className="portal-button-secondary" onClick={saveNotes}>Save Notes</button>
                   </div>
                   <div className="rounded-lg border-l-4 border-[var(--brand-red)] bg-[var(--brand-red-light)] p-4 text-sm text-[var(--brand-navy)]">
-                    {summary || 'AI summary will appear here after generation.'}
+                    <p>{summary || 'AI summary will appear here after generation.'}</p>
+                    {keyDecisions.length > 0 && (
+                      <div className="mt-3">
+                        <p className="font-semibold">Key decisions</p>
+                        <ul className="mt-1 list-disc space-y-1 pl-5">
+                          {keyDecisions.map((decision, index) => <li key={`${decision}-${index}`}>{decision}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {generatedActionItems.length > 0 && (
+                      <div className="mt-3">
+                        <p className="font-semibold">Generated action items</p>
+                        <ul className="mt-1 list-disc space-y-1 pl-5">
+                          {generatedActionItems.map((item, index) => (
+                            <li key={`${item.task || 'action'}-${index}`}>
+                              {item.task || 'Untitled action'}{item.owner ? ` — ${item.owner}` : ''}{item.due_date ? ` (due ${item.due_date})` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
