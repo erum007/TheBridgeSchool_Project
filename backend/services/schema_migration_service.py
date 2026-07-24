@@ -11,6 +11,7 @@ def apply_additive_schema_updates(engine) -> None:
             'department': 'VARCHAR(120) NULL',
         },
         'meetings': {
+            'end_time': 'DATETIME NULL',
             'agenda': 'TEXT NULL',
             'meeting_mode': "VARCHAR(24) NOT NULL DEFAULT 'in_person'",
             'meeting_link': 'VARCHAR(1000) NULL',

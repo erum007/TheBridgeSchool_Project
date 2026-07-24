@@ -8,6 +8,7 @@ import Modal from './Modal.jsx'
 const departments = ['Academic', 'Operations', 'Admissions', 'Student Affairs', 'Finance', 'Custom']
 const emptyForm = {
   title: '', agenda: '', scheduled_at: '', department: 'Academic', audience_departments: [], attendee_ids: [], external_emails: [],
+  end_time: '',
   meeting_mode: 'in_person', meeting_link: '', location: '',
 }
 
@@ -28,8 +29,12 @@ export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
   }
 
   const submit = async () => {
-    if (!form.title.trim() || !form.scheduled_at) {
-      toast.error('Title and date & time are required')
+    if (!form.title.trim() || !form.scheduled_at || !form.end_time) {
+      toast.error('Title, start time, and end time are required')
+      return
+    }
+    if (new Date(form.end_time) <= new Date(form.scheduled_at)) {
+      toast.error('End time must be after the start time')
       return
     }
     if (['online', 'choice'].includes(form.meeting_mode) && !form.meeting_link.trim()) {
@@ -41,7 +46,11 @@ export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
       return
     }
     try {
-      const response = await meetingsApi.create(form)
+      const response = await meetingsApi.create({
+        ...form,
+        scheduled_at: new Date(form.scheduled_at).toISOString(),
+        end_time: new Date(form.end_time).toISOString(),
+      })
       const { invitations_sent: sent = 0, invitations_failed: failed = 0 } = response.data
       toast.success(`Meeting created${sent ? ` — ${sent} invite${sent === 1 ? '' : 's'} sent` : ''}${failed ? ` (${failed} invite${failed === 1 ? '' : 's'} failed)` : ''}`)
       onCreated?.()
@@ -72,8 +81,12 @@ export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
           <textarea className="portal-input mt-1 min-h-24" placeholder="Topics to discuss, decisions needed, or preparation required." value={form.agenda} onChange={(event) => setForm({ ...form, agenda: event.target.value })} />
         </div>
         <div>
-          <label className="portal-label block">Date & time <span className="text-[var(--brand-red)]">*</span></label>
+          <label className="portal-label block">Start date & time <span className="text-[var(--brand-red)]">*</span></label>
           <input required type="datetime-local" className="portal-input mt-1" value={form.scheduled_at} onChange={(event) => setForm({ ...form, scheduled_at: event.target.value })} />
+        </div>
+        <div>
+          <label className="portal-label block">End date & time <span className="text-[var(--brand-red)]">*</span></label>
+          <input required type="datetime-local" min={form.scheduled_at || undefined} className="portal-input mt-1" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} />
         </div>
         <div>
           <label className="portal-label block">Department / audience</label>

@@ -5,6 +5,7 @@ Quill.register("modules/blotFormatter", BlotFormatter);
 import { useEffect, useMemo, useState } from 'react'
 import { useRef } from "react";
 import axios from "axios";
+import { jsPDF } from 'jspdf'
 import { format, formatDistanceToNow, parseISO } from 'date-fns'
 import {
   BookOpen,
@@ -99,7 +100,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   const [actionForm, setActionForm] = useState({ meeting_id: '', description: '', assigned_to: '', due_date: '', whatsapp_reminder_frequency: 'none', whatsapp_reminder_at: '' })
 
   const visibleMeetings = meetings.filter((meeting) => meeting.status)
-  const pastMeetings = meetings.filter((meeting) => meeting.status === 'past')
+  const pastMeetings = useMemo(() => meetings.filter((meeting) => meeting.status === 'past'), [meetings])
   const filteredActions = useMemo(() => {
     if (assigneeFilter === 'all') return actionItems
     return actionItems.filter((item) => String(item.assigned_to) === String(assigneeFilter))
@@ -174,6 +175,69 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     } finally {
       setSummaryLoading(false)
     }
+  }
+
+  const downloadSummaryPdf = () => {
+    const meeting = pastMeetings.find((item) => item.id === Number(selectedPastMeeting))
+    if (!meeting || !summary) {
+      toast.error('Generate or select a meeting summary before downloading it')
+      return
+    }
+
+    const document = new jsPDF()
+    const margin = 18
+    const pageWidth = document.internal.pageSize.getWidth()
+    const pageHeight = document.internal.pageSize.getHeight()
+    const contentWidth = pageWidth - (margin * 2)
+    let y = 20
+    const addLines = (text, size = 11) => {
+      document.setFontSize(size)
+      const lines = document.splitTextToSize(String(text), contentWidth)
+      lines.forEach((line) => {
+        if (y > pageHeight - 18) {
+          document.addPage()
+          y = 20
+        }
+        document.text(line, margin, y)
+        y += size * 0.48 + 2
+      })
+    }
+    const meetingDate = format(parseISO(meeting.scheduled_at), 'd MMMM yyyy, h:mm a')
+
+    document.setFont('helvetica', 'bold')
+    addLines(`Summary for: ${meeting.title} - ${meetingDate}`, 16)
+    y += 4
+    document.setFont('helvetica', 'normal')
+    addLines(`Meeting date and time: ${meetingDate}`)
+    y += 5
+    document.setFont('helvetica', 'bold')
+    addLines('AI-generated summary', 13)
+    document.setFont('helvetica', 'normal')
+    addLines(summary)
+
+    if (keyDecisions.length) {
+      y += 4
+      document.setFont('helvetica', 'bold')
+      addLines('Key decisions', 13)
+      document.setFont('helvetica', 'normal')
+      keyDecisions.forEach((decision) => addLines(`- ${decision}`))
+    }
+
+    if (generatedActionItems.length) {
+      y += 4
+      document.setFont('helvetica', 'bold')
+      addLines('Action items', 13)
+      document.setFont('helvetica', 'normal')
+      generatedActionItems.forEach((item) => {
+        const owner = item.owner || 'Unassigned'
+        const dueDate = item.due_date || 'No due date'
+        addLines(`- ${item.task || 'Untitled action'} - Owner: ${owner}; Due: ${dueDate}`)
+      })
+    }
+
+    const slug = meeting.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'meeting'
+    const dateForFilename = format(parseISO(meeting.scheduled_at), 'yyyy-MM-dd')
+    document.save(`meeting-summary-${slug}-${dateForFilename}.pdf`)
   }
 
   const boardColumns = ['todo', 'in_progress', 'done'].map((status) => ({
@@ -259,6 +323,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                   <div className="flex flex-wrap gap-3">
                     <button type="button" className="portal-button-primary" onClick={generateSummary} disabled={summaryLoading}>{summaryLoading ? 'Generating...' : 'Generate AI Summary'}</button>
                     <button type="button" className="portal-button-secondary" onClick={saveNotes}>Save Notes</button>
+                    {summary ? <button type="button" className="portal-button-secondary" onClick={downloadSummaryPdf}>Download Summary as PDF</button> : null}
                   </div>
                   <div className="rounded-lg border-l-4 border-[var(--brand-red)] bg-[var(--brand-red-light)] p-4 text-sm text-[var(--brand-navy)]">
                     <p>{summary || 'AI summary will appear here after generation.'}</p>
