@@ -650,6 +650,14 @@ export function EmailModuleView() {
 
   const submitTemplate = async (event) => {
     event.preventDefault()
+    const visibleBody = templateForm.body
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;|&#160;/gi, ' ')
+      .trim()
+    if (!visibleBody) {
+      toast.error('Body is required')
+      return
+    }
     try {
       if (editingTemplateId) {
 
@@ -921,11 +929,11 @@ export function EmailModuleView() {
                 <form className="space-y-4 portal-panel" onSubmit={submitTemplate}>
                   <div>
                     <label className="portal-label block">Name</label>
-                    <input className="portal-input mt-1" value={templateForm.name} onChange={(event) => setTemplateForm({ ...templateForm, name: event.target.value })} />
+                    <input required className="portal-input mt-1" value={templateForm.name} onChange={(event) => setTemplateForm({ ...templateForm, name: event.target.value })} />
                   </div>
                   <div>
                     <label className="portal-label block">Subject</label>
-                    <input className="portal-input mt-1" value={templateForm.subject} onChange={(event) => setTemplateForm({ ...templateForm, subject: event.target.value })} />
+                    <input required className="portal-input mt-1" value={templateForm.subject} onChange={(event) => setTemplateForm({ ...templateForm, subject: event.target.value })} />
                   </div>
                   {/* <div>
                     <label className="portal-label block">Body</label>

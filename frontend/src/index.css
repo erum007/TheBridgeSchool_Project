@@ -272,3 +272,80 @@ input[type='checkbox'] {
 .email-preview-content pre {
   white-space: pre-wrap;
 }
+
+/* Quill persists paragraph alignment as classes. The preview is outside the
+   editor's .ql-editor wrapper, so reproduce those rules here. */
+.email-preview-content .ql-align-center {
+  text-align: center;
+}
+
+.email-preview-content .ql-align-right {
+  text-align: right;
+}
+
+.email-preview-content .ql-align-justify {
+  text-align: justify;
+}
+
+/* BlotFormatter2 stores image/iframe alignment on the blot itself rather than
+   using Quill's paragraph alignment classes. Its bundled rules only target
+   elements inside .ql-editor, so repeat them for the standalone preview. */
+.email-preview-content {
+  --blot-align-left-margin: 0.5rem 1rem 0.5rem 0;
+  --blot-align-center-margin: 1rem auto;
+  --blot-align-right-margin: 0.5rem 0 0.5rem 1rem;
+}
+
+.email-preview-content [class*="ql-image-align-"] {
+  display: flex;
+  flex-wrap: wrap;
+  width: var(--resize-width);
+  max-width: 100%;
+}
+
+.email-preview-content [class*="ql-image-align-"] > img {
+  flex: 1 1 auto;
+  z-index: 1;
+}
+
+.email-preview-content .ql-image-align-left,
+.email-preview-content .ql-iframe-align-left {
+  margin: var(--blot-align-left-margin);
+  float: left;
+}
+
+.email-preview-content .ql-image-align-center,
+.email-preview-content .ql-iframe-align-center {
+  margin: var(--blot-align-center-margin);
+}
+
+.email-preview-content .ql-image-align-right,
+.email-preview-content .ql-iframe-align-right {
+  margin: var(--blot-align-right-margin);
+  float: right;
+}
+
+.email-preview-content [class*="ql-image-align-"][data-title] {
+  margin-bottom: 0;
+}
+
+.email-preview-content [class*="ql-image-align-"][data-title]::after {
+  content: attr(data-title);
+  width: 100%;
+  padding: 0.25rem 0.2rem;
+  background-color: white;
+  font-size: 0.9rem;
+  line-height: 1.1;
+}
+
+.email-preview-content .ql-image-align-left[data-title]::after {
+  text-align: left;
+}
+
+.email-preview-content .ql-image-align-center[data-title]::after {
+  text-align: center;
+}
+
+.email-preview-content .ql-image-align-right[data-title]::after {
+  text-align: right;
+}
