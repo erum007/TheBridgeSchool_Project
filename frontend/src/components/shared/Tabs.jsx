@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-export default function Tabs({ tabs, defaultTab }) {
+export default function Tabs({ tabs, defaultTab, activeTab: controlledActiveTab, onTabChange }) {
   const initialTab = defaultTab || tabs[0]?.id
-  const [activeTab, setActiveTab] = useState(initialTab)
+  const [uncontrolledActiveTab, setUncontrolledActiveTab] = useState(initialTab)
+  const activeTab = controlledActiveTab ?? uncontrolledActiveTab
+  const selectTab = (tabId) => {
+    if (controlledActiveTab === undefined) setUncontrolledActiveTab(tabId)
+    onTabChange?.(tabId)
+  }
   const buttonRefs = useRef({})
   const [indicator, setIndicator] = useState({ left: 0, width: 0 })
 
@@ -28,7 +33,7 @@ export default function Tabs({ tabs, defaultTab }) {
                 }
               }}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
               className={`relative px-4 py-2.5 font-display text-sm font-medium transition-colors duration-150 ${activeTab === tab.id ? 'text-[var(--brand-navy)]' : 'text-[var(--text-muted)] hover:text-[var(--brand-navy)]'}`}
             >
               {tab.label}

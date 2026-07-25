@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import os
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -42,6 +43,7 @@ from .routers import (
     results_router,
     users_router,
     whatsapp_router,
+    restore_scheduled_emails,
 )
 from .services.auth_service import get_password_hash
 from .services.scheduler_service import ensure_scheduler_started
@@ -56,9 +58,15 @@ app.mount(
     name="uploads"
 )
 
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',')
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['http://localhost:5173'],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
@@ -207,6 +215,7 @@ def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
     apply_additive_schema_updates(engine)
     ensure_scheduler_started()
+    restore_scheduled_emails()
     restore_reminders()
     db = SessionLocal()
     try:

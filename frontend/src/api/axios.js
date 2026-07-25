@@ -1,7 +1,9 @@
 import axios from 'axios'
 
 export const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  // Leave this empty when the frontend and API are served from the same origin.
+  // Set VITE_API_BASE_URL only when the API is hosted on a separate origin.
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
 })
 
 api.interceptors.request.use((config) => {

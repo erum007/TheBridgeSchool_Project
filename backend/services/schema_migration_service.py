@@ -16,6 +16,12 @@ def apply_additive_schema_updates(engine) -> None:
             'meeting_link': 'VARCHAR(1000) NULL',
             'location': 'VARCHAR(500) NULL',
         },
+        'email_templates': {
+            'attachments': 'JSON NULL',
+        },
+        'scheduled_emails': {
+            'attachments': 'JSON NULL',
+        },
     }
     with engine.begin() as connection:
         for table_name, columns in additions.items():

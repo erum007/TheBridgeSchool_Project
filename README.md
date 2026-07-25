@@ -32,6 +32,10 @@ npm install
 npm run dev
 ```
 
+### Deployment API URL
+
+The frontend uses same-origin API paths by default, so no source changes are needed when the frontend and backend are deployed behind one domain. For a separately hosted API, set `VITE_API_BASE_URL` in the frontend deployment environment and set `CORS_ORIGINS` in the backend environment (see the `.env.example` files). Uploaded email images use the deployed request host; set `PUBLIC_BASE_URL` in the backend environment if a reverse proxy does not forward that public host.
+
 ### 4. Test Accounts (seeded automatically)
 | Role    | Email                  | Password     |
 |---------|------------------------|--------------|
