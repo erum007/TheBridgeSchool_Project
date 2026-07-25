@@ -241,3 +241,34 @@ input[type='checkbox'] {
     border-radius: 8px;
 }
 
+.email-editor .ql-toolbar button.ql-document {
+  width: auto;
+  padding: 0 0.45rem;
+}
+
+.email-editor .ql-toolbar button.ql-document::before {
+  content: 'File';
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* Keep user-authored email content inside the preview modal on narrow screens
+   and when a paragraph contains a long, unbroken value such as a URL. */
+.email-preview-content,
+.email-preview-content * {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.email-preview-content img,
+.email-preview-content video,
+.email-preview-content iframe {
+  height: auto;
+}
+
+.email-preview-content pre {
+  white-space: pre-wrap;
+}

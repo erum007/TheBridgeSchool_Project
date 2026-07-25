@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum as SQLEnum, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Column, DateTime, Enum as SQLEnum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from ..database import Base
@@ -17,6 +17,7 @@ class ScheduledEmail(Base):
     recipient_group = Column(String(120), nullable=False)
     subject = Column(String(255), nullable=False)
     body = Column(Text, nullable=False)
+    attachments = Column(JSON, nullable=True, default=list)
     scheduled_at = Column(DateTime, nullable=True)
     sent_at = Column(DateTime, nullable=True)
     status = Column(SQLEnum(EmailStatus), nullable=False, default=EmailStatus.draft)

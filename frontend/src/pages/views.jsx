@@ -1,6 +1,9 @@
 import ReactQuill, { Quill } from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 import BlotFormatter from "@enzedonline/quill-blot-formatter2";
+import "@enzedonline/quill-blot-formatter2/dist/css/quill-blot-formatter2.css";
+Quill.register("modules/blotFormatter2", BlotFormatter);
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 Quill.register("modules/blotFormatter", BlotFormatter);
 import { useEffect, useMemo, useState } from 'react'
 import { useRef } from "react";
@@ -53,6 +56,24 @@ import Tabs from '../components/shared/Tabs.jsx'
 import Table from '../components/shared/Table.jsx'
 import CreateMeetingModal from '../components/shared/CreateMeetingModal.jsx'
 const formatDate = (value, pattern = 'PPP') => (value ? format(parseISO(value), pattern) : '—')
+
+function AttachmentList({ attachments, onRemove }) {
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-app)] p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Email attachments</div>
+      <div className="space-y-1">
+        {attachments.map((attachment) => (
+          <div key={attachment.stored_filename} className="flex items-center justify-between gap-3 text-sm text-[var(--text-primary)]">
+            <span className="min-w-0 truncate">{attachment.filename}</span>
+            <button type="button" className="portal-button-ghost shrink-0 text-[var(--brand-red)]" onClick={() => onRemove(attachment.stored_filename)} aria-label={`Remove ${attachment.filename}`}>
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function useMeetingData() {
   return useApi(() => meetingsApi.list(), [])
@@ -412,79 +433,115 @@ export function EmailModuleView() {
   const { data: emails = [], loading: emailsLoading, refetch: refetchEmails } = useApi(() => emailsApi.list(), [])
   const { data: templates = [], refetch: refetchTemplates } = useApi(() => emailsApi.templates(), [])
   const [tab, setTab] = useState('dashboard')
-  const [compose, setCompose] = useState({ recipient_group: 'parents', individual_email: '', template_id: '', subject: '', body: '', scheduled_at: '' })
-  const [templateForm, setTemplateForm] = useState({ name: '', subject: '', body: '' })
+  const [compose, setCompose] = useState({ recipient_group: 'parents', individual_emails: '', template_id: '', subject: '', body: '', scheduled_at: '', attachments: [] })
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [editingDraftId, setEditingDraftId] = useState(null)
+  const [deliveryMode, setDeliveryMode] = useState('now')
+  const [templateForm, setTemplateForm] = useState({ name: '', subject: '', body: '', attachments: [] })
   const [editingTemplateId, setEditingTemplateId] = useState(null);
+  const [templatePendingDeletion, setTemplatePendingDeletion] = useState(null)
+  const [draftPendingDeletion, setDraftPendingDeletion] = useState(null)
+  const [templateEditorKey, setTemplateEditorKey] = useState(0)
+  const attachmentTargetRef = useRef('compose')
   const draftEmails = emails.filter((item) => item.status === 'draft')
   const scheduledEmails = emails.filter((item) => item.status === 'scheduled')
   const sentEmails = emails.filter((item) => item.status === 'sent')
-  const quillRef = useRef(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const imageHandler = () => {
-  const input = document.createElement("input");
-  
+  const minimumScheduleTime = useMemo(() => {
+    const now = new Date()
+    now.setMinutes(now.getMinutes() + 1, 0, 0)
+    const offset = now.getTimezoneOffset() * 60_000
+    return new Date(now.getTime() - offset).toISOString().slice(0, 16)
+  }, [])
+  const imageHandler = useCallback(function imageHandler() {
+    const editor = this.quill;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
 
-  input.setAttribute("type", "file");
-  input.setAttribute("accept", "image/*");
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
 
-  input.click();
+      const formData = new FormData();
+      formData.append("file", file);
 
-  input.onchange = async () => {
-    const file = input.files[0];
+      try {
+        const response = await emailsApi.uploadImage(formData);
+        const range = editor.getSelection(true);
+        editor.insertEmbed(range.index, "image", response.data.url, "user");
+        editor.setSelection(range.index + 1, 0, "silent");
+      } catch (error) {
+        console.error("Image upload failed", error);
+        toast.error("Image upload failed.");
+      }
+    };
 
-    if (!file) return;
+    input.click();
+  }, []);
 
-    const formData = new FormData();
-    formData.append("file", file);
+  const documentHandler = useCallback(function documentHandler() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv";
 
-    try {
-      const response = await axios.post(
-        "http://localhost:8000/api/upload-image",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const response = await emailsApi.uploadDocument(formData);
+        const attachment = response.data;
+        if (attachmentTargetRef.current === 'template') {
+          setTemplateForm((current) => ({ ...current, attachments: [...current.attachments, attachment] }));
+        } else {
+          setCompose((current) => ({ ...current, attachments: [...current.attachments, attachment] }));
         }
-      );
+        toast.success(`${attachment.filename} attached`);
+      } catch (error) {
+        console.error("Document upload failed", error);
+        toast.error(error?.response?.data?.detail || "Document upload failed.");
+      }
+    };
 
-      const imageUrl = response.data.url;
+    input.click();
+  }, []);
 
-      const editor = quillRef.current.getEditor();
-
-      const range = editor.getSelection(true);
-
-      editor.insertEmbed(range.index, "image", imageUrl);
-    } catch (err) {
-      console.error(err);
-      alert("Image upload failed.");
-    }
-  };
-};
-const quillModules = {
-  toolbar: {
-    container: [
-      [{ header: [1, 2, 3, false] }],
-
-      ["bold", "italic", "underline"],
-
-      [{ color: [] }, { background: [] }],
-
-      [{ list: "ordered" }, { list: "bullet" }],
-
-      [{ align: [] }],
-
-      ["link", "image"],
-
-      ["clean"],
-    ],
-
-    handlers: {
-      image: imageHandler,
+  // ReactQuill recreates its editor when `modules` changes. Keeping this object stable
+  // prevents the formatter from being destroyed after the first resize pointer event.
+  const quillModules = useMemo(() => ({
+    toolbar: {
+      container: [
+        [{ header: [1, 2, 3, false] }],
+        ["bold", "italic", "underline"],
+        [{ color: [] }, { background: [] }],
+        [{ list: "ordered" }, { list: "bullet" }],
+        [{ align: [] }],
+        ["link", "image", "document"],
+        ["clean"],
+      ],
+      handlers: { image: imageHandler, document: documentHandler },
     },
-  },
-  blotFormatter: {},
-};
+    blotFormatter2: {
+      resize: {
+        allowResizing: true,
+        useRelativeSize: false,
+        minimumWidthPx: 25,
+      },
+      image: { autoHeight: true },
+    },
+  }), [documentHandler, imageHandler]);
+  useEffect(() => {
+    if (compose.template_id) return
+
+    setCompose((current) => {
+      if (!current.subject && !current.body && current.attachments.length === 0) return current
+      return { ...current, subject: '', body: '', attachments: [] }
+    })
+  }, [compose.template_id])
   // useEffect(() => {
   //   const selectedTemplate = templates.find((template) => String(template.id) === String(compose.template_id))
   //   if (selectedTemplate) {
@@ -494,26 +551,102 @@ const quillModules = {
 
   const submitCompose = async (event) => {
     event.preventDefault()
-    if (compose.recipient_group === 'individual' && !compose.individual_email) {
-      toast.error('Please enter an email address')
+    const individualRecipients = compose.individual_emails.split(/[\s,;]+/).map((email) => email.trim()).filter(Boolean)
+    if (compose.recipient_group === 'individual' && individualRecipients.length === 0) {
+      toast.error('Please enter at least one email address')
+      return
+    }
+    if (deliveryMode === 'schedule' && (!compose.scheduled_at || new Date(compose.scheduled_at) <= new Date())) {
+      toast.error('Schedule time must be in the future')
       return
     }
     try {
       const payload = {
         ...compose,
-        recipient_group: compose.recipient_group === 'individual' ? compose.individual_email : compose.recipient_group,
+        recipient_group: compose.recipient_group === 'individual' ? individualRecipients.join(',') : compose.recipient_group,
         template_id: compose.template_id || null,
+        scheduled_at: deliveryMode === 'schedule' ? compose.scheduled_at : null,
       }
-      if (compose.scheduled_at) {
+      if (deliveryMode === 'schedule') {
         await emailsApi.schedule(payload)
       } else {
         await emailsApi.send(payload)
       }
       toast.success('Email saved')
-      setCompose({ recipient_group: 'parents', individual_email: '', template_id: '', subject: '', body: '', scheduled_at: '' })
+      setCompose({ recipient_group: 'parents', individual_emails: '', template_id: '', subject: '', body: '', scheduled_at: '', attachments: [] })
+      setSelectedTemplateId('')
+      setEditingDraftId(null)
+      setDeliveryMode('now')
       refetchEmails()
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not save email')
+    }
+  }
+
+  const saveDraft = async () => {
+    const individualRecipients = compose.individual_emails.split(/[\s,;]+/).map((email) => email.trim()).filter(Boolean)
+    if (compose.recipient_group === 'individual' && individualRecipients.length === 0) {
+      toast.error('Please enter at least one email address')
+      return
+    }
+    try {
+      const payload = {
+        ...compose,
+        recipient_group: compose.recipient_group === 'individual' ? individualRecipients.join(',') : compose.recipient_group,
+        template_id: compose.template_id || null,
+        scheduled_at: null,
+      }
+      if (editingDraftId) {
+        await emailsApi.updateDraft(editingDraftId, payload)
+        toast.success('Draft updated')
+      } else {
+        const response = await emailsApi.saveDraft(payload)
+        setEditingDraftId(response.data.id)
+        toast.success('Draft saved')
+      }
+      setCompose({ recipient_group: 'parents', individual_emails: '', template_id: '', subject: '', body: '', scheduled_at: '', attachments: [] })
+      setSelectedTemplateId('')
+      setEditingDraftId(null)
+      setDeliveryMode('now')
+      refetchEmails()
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not save draft')
+    }
+  }
+
+  const loadDraft = (draft) => {
+    const groupOptions = ['parents', 'students', 'teachers', 'all']
+    const recipientGroup = groupOptions.includes(draft.recipient_group) ? draft.recipient_group : 'individual'
+    setCompose({
+      recipient_group: recipientGroup,
+      individual_emails: recipientGroup === 'individual' ? draft.recipient_group : '',
+      template_id: draft.template_id ? String(draft.template_id) : '',
+      subject: draft.subject,
+      body: draft.body,
+      scheduled_at: '',
+      attachments: draft.attachments || [],
+    })
+    setSelectedTemplateId(draft.template_id ? String(draft.template_id) : '')
+    setEditingDraftId(draft.id)
+    setDeliveryMode('now')
+    setTab('compose')
+  }
+
+  const deleteDraft = async () => {
+    if (!draftPendingDeletion) return
+    try {
+      await emailsApi.remove(draftPendingDeletion.id)
+      if (editingDraftId === draftPendingDeletion.id) {
+        setEditingDraftId(null)
+        setCompose({ recipient_group: 'parents', individual_emails: '', template_id: '', subject: '', body: '', scheduled_at: '', attachments: [] })
+        setSelectedTemplateId('')
+      }
+      toast.success('Draft deleted')
+      refetchEmails()
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not delete draft')
+    } finally {
+      setDraftPendingDeletion(null)
     }
   }
 
@@ -538,12 +671,8 @@ const quillModules = {
     }
 
     setEditingTemplateId(null);
-
-    setTemplateForm({
-        name: "",
-        subject: "",
-        body: "",
-    });
+    setTemplateForm({ name: '', subject: '', body: '', attachments: [] });
+    setTemplateEditorKey((current) => current + 1);
 
     refetchTemplates();
     } catch (error) {
@@ -555,10 +684,42 @@ const quillModules = {
     }
   }
 
+  const deleteTemplate = async () => {
+    if (!templatePendingDeletion) return
+    const template = templatePendingDeletion
+    try {
+      await emailsApi.deleteTemplate(template.id)
+
+      if (editingTemplateId === template.id) {
+        setEditingTemplateId(null)
+        setTemplateForm({ name: '', subject: '', body: '', attachments: [] })
+      }
+      if (String(compose.template_id) === String(template.id)) {
+        setSelectedTemplateId('')
+        setCompose((current) => ({
+          ...current,
+          template_id: '',
+          subject: '',
+          body: '',
+          attachments: [],
+        }))
+      }
+
+      toast.success('Template deleted')
+      refetchTemplates()
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not delete template')
+    } finally {
+      setTemplatePendingDeletion(null)
+    }
+  }
+
   return (
     <div className="rounded-xl border border-[var(--border-default)] bg-white p-6 shadow-sm">
       <PageHeader title="Email Module" subtitle="Compose, schedule, and manage templates." />
       <Tabs
+        activeTab={tab}
+        onTabChange={setTab}
         tabs={[
           {
             id: 'dashboard',
@@ -566,39 +727,49 @@ const quillModules = {
             content: (
               <div className="space-y-6">
                 <div className="grid gap-6 lg:grid-cols-2">
-                  <Table
+                  <section>
+                    <h2 className="mb-3 font-display text-base font-bold text-[var(--brand-navy)]">Scheduled Emails</h2>
+                    <Table
                     loading={emailsLoading}
                     data={scheduledEmails}
                     columns={[
-                      { key: 'scheduled_at', label: 'Date', render: (row) => formatDate(row.scheduled_at) },
+                      { key: 'scheduled_at', label: 'Date & Time', render: (row) => formatDate(row.scheduled_at, 'PPP p') },
                       { key: 'recipient_group', label: 'Recipients' },
                       { key: 'subject', label: 'Subject' },
                       { key: 'template_id', label: 'Template', render: (row) => row.template_id || '—' },
                     ]}
                     emptyMessage="No scheduled emails yet."
                   />
-                  <Table
+                  </section>
+                  <section>
+                    <h2 className="mb-3 font-display text-base font-bold text-[var(--brand-navy)]">Drafts</h2>
+                    <Table
                     loading={emailsLoading}
                     data={draftEmails}
                     columns={[
                       { key: 'recipient_group', label: 'Recipients' },
                       { key: 'subject', label: 'Subject' },
                       { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+                      { key: 'actions', label: 'Actions', render: (row) => <div className="flex gap-2"><button type="button" className="portal-button-secondary" onClick={() => loadDraft(row)}>Load draft</button><button type="button" className="portal-button-ghost text-[var(--brand-red)]" onClick={() => setDraftPendingDeletion(row)}>Delete</button></div> },
                     ]}
                     emptyMessage="No drafts available."
                   />
+                  </section>
                 </div>
-                <Table
+                <section>
+                  <h2 className="mb-3 font-display text-base font-bold text-[var(--brand-navy)]">Sent Emails</h2>
+                  <Table
                   loading={emailsLoading}
                   data={sentEmails}
                   columns={[
-                    { key: 'scheduled_at', label: 'Date', render: (row) => formatDate(row.sent_at || row.scheduled_at) },
+                    { key: 'scheduled_at', label: 'Date & Time', render: (row) => formatDate(row.sent_at || row.scheduled_at, 'PPP p') },
                     { key: 'recipient_group', label: 'To' },
                     { key: 'subject', label: 'Subject' },
                     { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
                   ]}
                   emptyMessage="No sent emails yet."
                 />
+                </section>
               </div>
             ),
           },
@@ -618,13 +789,13 @@ const quillModules = {
                   </select>
                   {compose.recipient_group === 'individual' && (
                     <div className="mt-2">
-                      <input
-                        type="email"
-                        placeholder="Enter email address"
-                        value={compose.individual_email || ''}
-                        onChange={(event) => setCompose({ ...compose, individual_email: event.target.value })}
-                        className="w-full border border-[var(--border-default)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-primary)] bg-white placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-navy)] focus:ring-2 focus:ring-[var(--brand-navy)]/10 transition-colors duration-150"
+                      <textarea
+                        placeholder={'parent.one@example.com\nparent.two@example.com'}
+                        value={compose.individual_emails}
+                        onChange={(event) => setCompose((current) => ({ ...current, individual_emails: event.target.value }))}
+                        className="w-full min-h-24 border border-[var(--border-default)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-primary)] bg-white placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--brand-navy)] focus:ring-2 focus:ring-[var(--brand-navy)]/10 transition-colors duration-150"
                       />
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">Add one address per line, or separate addresses with commas.</p>
                     </div>
                   )}
                 </div>
@@ -632,21 +803,32 @@ const quillModules = {
                   <label className="portal-label block">Template</label>
                   <select
                     className="portal-input mt-1"
-                    value={compose.template_id}
+                    value={selectedTemplateId}
                     
                     onChange={(e) => {
                         const id = e.target.value;
+                        setSelectedTemplateId(id);
+                        if (!id) {
+                          setCompose((current) => ({
+                            ...current,
+                            template_id: '',
+                            subject: '',
+                            body: '',
+                            attachments: [],
+                          }));
+                          return;
+                        }
 
-                        const template = templates.find(
-                            (t) => String(t.id) === id
-                        );
-
-                        setCompose((current) => ({
+                        const template = templates.find((item) => String(item.id) === id);
+                        if (template) {
+                          setCompose((current) => ({
                             ...current,
                             template_id: id,
-                            subject: template ? template.subject : "",
-                            body: template ? template.body : "",
-                        }));
+                            subject: template.subject,
+                            body: template.body,
+                            attachments: template.attachments || [],
+                          }));
+                        }
                     }}
                 >
                     <option value="">None</option>
@@ -663,8 +845,12 @@ const quillModules = {
                   <input className="portal-input mt-1" value={compose.subject} onChange={(event) => setCompose({ ...compose, subject: event.target.value })} />
                 </div>
                 <div>
-                  <label className="portal-label block">Schedule datetime</label>
-                  <input type="datetime-local" className="portal-input mt-1" value={compose.scheduled_at} onChange={(event) => setCompose({ ...compose, scheduled_at: event.target.value })} />
+                  <label className="portal-label block">Delivery</label>
+                  <div className="mt-1 flex flex-wrap gap-4 text-sm text-[var(--text-primary)]">
+                    <label className="flex items-center gap-2"><input type="radio" name="delivery-mode" checked={deliveryMode === 'now'} onChange={() => { setDeliveryMode('now'); setCompose((current) => ({ ...current, scheduled_at: '' })) }} /> Send now</label>
+                    <label className="flex items-center gap-2"><input type="radio" name="delivery-mode" checked={deliveryMode === 'schedule'} onChange={() => setDeliveryMode('schedule')} /> Schedule for later</label>
+                  </div>
+                  {deliveryMode === 'schedule' && <input type="datetime-local" min={minimumScheduleTime} className="portal-input mt-3" value={compose.scheduled_at} onChange={(event) => setCompose((current) => ({ ...current, scheduled_at: event.target.value }))} />}
                 </div>
                 <div className="lg:col-span-2">
                 <label className="portal-label block">Body</label>
@@ -673,17 +859,15 @@ const quillModules = {
                   theme="snow"
                   modules={quillModules}
                   value={compose.body}
-                  onChange={(value) =>
-                    setCompose({
-                      ...compose,
-                      body: value,
-                    })
-                  }
+                  onChange={(value) => setCompose((current) => ({ ...current, body: value }))}
                   className="email-editor"
+                  onFocus={() => { attachmentTargetRef.current = 'compose' }}
                 />
+                {compose.attachments.length > 0 && <AttachmentList attachments={compose.attachments} onRemove={(storedFilename) => setCompose((current) => ({ ...current, attachments: current.attachments.filter((attachment) => attachment.stored_filename !== storedFilename) }))} />}
               </div>
-                <div className="lg:col-span-2 flex justify-end">
-                  <button type="submit" className="portal-button-primary">Send</button>
+                <div className="lg:col-span-2 flex justify-end gap-3">
+                  <button type="button" className="portal-button-secondary" onClick={saveDraft}>Save Draft</button>
+                  <button type="submit" className="portal-button-primary">{deliveryMode === 'schedule' ? 'Schedule Email' : 'Send Now'}</button>
                 </div>
               </form>
             ),
@@ -715,6 +899,7 @@ const quillModules = {
                                 name: row.name,
                                 subject: row.subject,
                                 body: row.body,
+                                attachments: row.attachments || [],
                             });
 
                         }}
@@ -724,15 +909,7 @@ const quillModules = {
 
                         <button
                           type="button"
-                          onClick={async () => {
-                            if (!window.confirm("Delete this template?")) return;
-
-                            await emailsApi.deleteTemplate(row.id);
-
-                            toast.success("Template deleted");
-
-                            refetchTemplates();
-                          }}
+                          onClick={() => setTemplatePendingDeletion(row)}
                           className="text-red-600 hover:underline"
                         >
                           Delete
@@ -761,18 +938,15 @@ const quillModules = {
 
                   <div className="mt-2">
                     <ReactQuill
-                    ref={quillRef}
+                    key={templateEditorKey}
                     theme="snow"
                     modules={quillModules}
                     value={templateForm.body}
-                    onChange={(value) =>
-                      setTemplateForm({
-                        ...templateForm,
-                        body: value,
-                      })
-                    }
+                    onChange={(value) => setTemplateForm((current) => ({ ...current, body: value }))}
                     className="email-editor"
+                    onFocus={() => { attachmentTargetRef.current = 'template' }}
                 />
+                {templateForm.attachments.length > 0 && <AttachmentList attachments={templateForm.attachments} onRemove={(storedFilename) => setTemplateForm((current) => ({ ...current, attachments: current.attachments.filter((attachment) => attachment.stored_filename !== storedFilename) }))} />}
                 </div>
               </div>
                   {/* <button type="submit" className="portal-button-primary">Create Template</button>
@@ -808,6 +982,7 @@ const quillModules = {
                               name: "",
                               subject: "",
                               body: "",
+                              attachments: [],
                           });
 
                       }}
@@ -826,7 +1001,7 @@ const quillModules = {
     onClose={() => setPreviewOpen(false)}
     title="Email Preview"
 >
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
 
         <div className="border-b pb-4">
             <p>
@@ -843,7 +1018,7 @@ const quillModules = {
         </div>
 
         <div
-            className="prose max-w-none"
+            className="email-preview-content min-w-0 max-w-full"
             dangerouslySetInnerHTML={{
                 __html: templateForm.body,
             }}
@@ -851,6 +1026,32 @@ const quillModules = {
 
     </div>
 </Modal>
+      <Modal
+        isOpen={Boolean(templatePendingDeletion)}
+        onClose={() => setTemplatePendingDeletion(null)}
+        title="Delete Email Template"
+        footer={
+          <>
+            <button type="button" className="portal-button-secondary" onClick={() => setTemplatePendingDeletion(null)}>Cancel</button>
+            <button type="button" className="portal-button-primary bg-[var(--brand-red)] hover:bg-[var(--brand-red-dark)]" onClick={deleteTemplate}>Delete Template</button>
+          </>
+        }
+      >
+        <p className="text-sm text-[var(--text-secondary)]">Delete <strong className="text-[var(--text-primary)]">{templatePendingDeletion?.name}</strong>? This cannot be undone.</p>
+      </Modal>
+      <Modal
+        isOpen={Boolean(draftPendingDeletion)}
+        onClose={() => setDraftPendingDeletion(null)}
+        title="Delete Draft"
+        footer={
+          <>
+            <button type="button" className="portal-button-secondary" onClick={() => setDraftPendingDeletion(null)}>Cancel</button>
+            <button type="button" className="portal-button-primary bg-[var(--brand-red)] hover:bg-[var(--brand-red-dark)]" onClick={deleteDraft}>Delete Draft</button>
+          </>
+        }
+      >
+        <p className="text-sm text-[var(--text-secondary)]">Delete the draft <strong className="text-[var(--text-primary)]">{draftPendingDeletion?.subject || 'Untitled draft'}</strong>? This cannot be undone.</p>
+      </Modal>
     </div>
   )
 }
