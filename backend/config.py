@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import quote_plus
+from urllib.parse import parse_qsl, quote_plus, urlencode, urlsplit, urlunsplit
 import os
 
 from dotenv import load_dotenv
@@ -35,10 +35,35 @@ class Settings:
     gemini_api_key: str = os.getenv('GEMINI_API_KEY', '')
     gemini_model: str = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
 
+    @staticmethod
+    def _resolve_ssl_ca(value: str) -> str:
+        ca_path = Path(value).expanduser()
+        if not ca_path.is_absolute():
+            ca_path = Path(__file__).parent / ca_path
+        ca_path = ca_path.resolve()
+        if not ca_path.is_file():
+            raise RuntimeError(f'Database SSL CA certificate not found: {ca_path}')
+        return ca_path.as_posix()
+
+    def _normalized_database_url(self) -> str:
+        parts = urlsplit(self.database_url)
+        query = parse_qsl(parts.query, keep_blank_values=True)
+        normalized_query = [
+            (key, self._resolve_ssl_ca(value) if key.lower() == 'ssl_ca' and value else value)
+            for key, value in query
+        ]
+        return urlunsplit((
+            parts.scheme,
+            parts.netloc,
+            parts.path,
+            urlencode(normalized_query),
+            parts.fragment,
+        ))
+
     @property
     def sqlalchemy_url(self) -> str:
         if self.database_url:
-            return self.database_url
+            return self._normalized_database_url()
 
         if not self.db_host or not self.db_user:
             raise RuntimeError(
@@ -54,12 +79,7 @@ class Settings:
         )
 
         if self.db_ssl_ca:
-            ca_path = Path(self.db_ssl_ca)
-            if not ca_path.is_absolute():
-                resolved_path = Path(__file__).parent / ca_path
-                if resolved_path.exists():
-                    ca_path = resolved_path
-            base_url += f"&ssl_ca={ca_path.as_posix()}"
+            base_url += f"&ssl_ca={quote_plus(self._resolve_ssl_ca(self.db_ssl_ca))}"
 
         return base_url
 
