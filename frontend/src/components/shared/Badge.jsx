@@ -7,6 +7,7 @@ const statusClasses = {
   in_progress: 'bg-[#fff8e6] text-[#8a6000] border-[#f0d88a]',
   scheduled: 'bg-[#fff8e6] text-[#8a6000] border-[#f0d88a]',
   upcoming: 'bg-[#fff8e6] text-[#8a6000] border-[#f0d88a]',
+  ongoing: 'bg-[var(--brand-navy-light)] text-[var(--brand-navy)] border-[var(--border-strong)]',
   todo: 'bg-[#f0f2f8] text-[var(--text-secondary)] border-[var(--border-strong)]',
   draft: 'bg-[#f0f2f8] text-[var(--text-secondary)] border-[var(--border-strong)]',
   pending: 'bg-[#f0f2f8] text-[var(--text-secondary)] border-[var(--border-strong)]',

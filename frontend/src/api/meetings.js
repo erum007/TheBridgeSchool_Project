@@ -7,5 +7,6 @@ export const meetingsApi = {
   update: (id, payload) => api.patch(`/api/meetings/${id}`, payload),
   remove: (id) => api.delete(`/api/meetings/${id}`),
   summarise: (id) => api.post(`/api/meetings/${id}/summarise`),
+  generateAiWorkspace: (id, payload) => api.post(`/api/meetings/${id}/ai-workspace`, payload),
 }
 

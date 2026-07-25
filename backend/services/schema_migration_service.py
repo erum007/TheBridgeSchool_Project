@@ -11,6 +11,7 @@ def apply_additive_schema_updates(engine) -> None:
             'department': 'VARCHAR(120) NULL',
         },
         'meetings': {
+            'end_time': 'DATETIME NULL',
             'agenda': 'TEXT NULL',
             'meeting_mode': "VARCHAR(24) NOT NULL DEFAULT 'in_person'",
             'meeting_link': 'VARCHAR(1000) NULL',
@@ -31,5 +32,5 @@ def apply_additive_schema_updates(engine) -> None:
             for column_name, definition in columns.items():
                 if column_name not in existing_columns:
                     connection.execute(text(f'ALTER TABLE `{table_name}` ADD COLUMN `{column_name}` {definition}'))
-        if 'users' in inspector.get_table_names():
+        if 'users' in inspector.get_table_names() and engine.dialect.name in {'mysql', 'mariadb'}:
             connection.execute(text("ALTER TABLE `users` MODIFY COLUMN `role` ENUM('admin','teacher','staff','student','parent') NOT NULL"))

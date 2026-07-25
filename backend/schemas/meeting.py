@@ -10,6 +10,7 @@ from .common import ORMBaseModel
 class MeetingCreate(ORMBaseModel):
     title: str = Field(min_length=1)
     scheduled_at: str
+    end_time: str
     department: str
     attendee_ids: list[int] = Field(default_factory=list)
     audience_departments: list[str] = Field(default_factory=list)
@@ -25,6 +26,7 @@ class MeetingUpdate(ORMBaseModel):
     status: Optional[str] = None
     attendee_ids: Optional[list[int]] = None
     scheduled_at: Optional[str] = None
+    end_time: Optional[str] = None
     title: Optional[str] = None
     department: Optional[str] = None
     agenda: Optional[str] = None
@@ -33,10 +35,16 @@ class MeetingUpdate(ORMBaseModel):
     location: Optional[str] = None
 
 
+class MeetingTranscriptRequest(ORMBaseModel):
+    transcript: str
+    notes: Optional[str] = None
+
+
 class MeetingRead(ORMBaseModel):
     id: int
     title: str
     scheduled_at: str
+    end_time: Optional[str] = None
     department: str
     status: str
     notes: Optional[str] = None

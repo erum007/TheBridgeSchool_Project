@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
 
+from ..config import settings
 from ..dependencies import get_current_user, get_db
 from ..models import Result, User, UserRole
 from ..services.auth_service import get_password_hash
@@ -39,10 +40,11 @@ async def upload_results(
             student = db.query(User).filter(User.name == row['student_name'], User.role == UserRole.student).first()
         if not student:
             generated_email = row.get('student_email') or f"{str(row.get('student_name') or 'student').lower().replace(' ', '.')}@bridge.local"
+            demo_password = settings.demo_password or settings.secret_key
             student = User(
                 name=str(row.get('student_name') or 'Student'),
                 email=generated_email,
-                hashed_password=get_password_hash('password123'),
+                hashed_password=get_password_hash(demo_password),
                 role=UserRole.student,
             )
             db.add(student)

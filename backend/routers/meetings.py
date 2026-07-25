@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,7 +20,10 @@ router = APIRouter(prefix='/api/meetings', tags=['meetings'])
 def _parse_datetime(value: str | None):
     if not value:
         return None
-    return datetime.fromisoformat(value.replace('Z', '+00:00'))
+    parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if parsed.tzinfo is None:
+        return parsed
+    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _has_meeting_access(meeting: Meeting, user: User) -> bool:
@@ -39,6 +42,13 @@ def _validate_meeting_details(payload) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='A meeting link is required for online or attendee-choice meetings')
     if payload.meeting_mode in {'in_person', 'choice'} and not payload.location:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='A location is required for in-person or attendee-choice meetings')
+
+
+def _validate_end_time(scheduled_at: datetime | None, end_time: datetime | None) -> None:
+    if not scheduled_at or not end_time:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Start and end times are required')
+    if end_time <= scheduled_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='End time must be after the start time')
 
 
 def _resolve_audience(db: Session, payload: MeetingCreate) -> list[User]:
@@ -112,11 +122,15 @@ def create_meeting(payload: MeetingCreate, db: Session = Depends(get_db), curren
     if current_user.role == UserRole.teacher and not current_user.head_teacher:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Head teacher permission required')
     _validate_meeting_details(payload)
+    scheduled_at = _parse_datetime(payload.scheduled_at)
+    end_time = _parse_datetime(payload.end_time)
+    _validate_end_time(scheduled_at, end_time)
     attendees = _resolve_audience(db, payload)
     external_emails = _validated_external_emails(payload)
     meeting = Meeting(
         title=payload.title.strip(),
-        scheduled_at=_parse_datetime(payload.scheduled_at),
+        scheduled_at=scheduled_at,
+        end_time=end_time,
         department='Custom audience' if payload.department == 'Custom' else payload.department,
         agenda=payload.agenda.strip() if payload.agenda else None,
         meeting_mode=payload.meeting_mode,
@@ -165,8 +179,12 @@ def update_meeting(meeting_id: int, payload: MeetingUpdate, db: Session = Depend
         meeting.department = payload.department
     if payload.status is not None:
         meeting.status = MeetingStatus(payload.status)
-    if payload.scheduled_at is not None:
-        meeting.scheduled_at = _parse_datetime(payload.scheduled_at)
+    next_scheduled_at = _parse_datetime(payload.scheduled_at) if payload.scheduled_at is not None else meeting.scheduled_at
+    next_end_time = _parse_datetime(payload.end_time) if payload.end_time is not None else meeting.end_time
+    if payload.scheduled_at is not None or payload.end_time is not None:
+        _validate_end_time(next_scheduled_at, next_end_time)
+        meeting.scheduled_at = next_scheduled_at
+        meeting.end_time = next_end_time
     if payload.agenda is not None:
         meeting.agenda = payload.agenda
     if payload.meeting_mode is not None:

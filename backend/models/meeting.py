@@ -15,6 +15,7 @@ class Meeting(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
     scheduled_at = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=True)
     department = Column(String(120), nullable=False)
     agenda = Column(Text, nullable=True)
     meeting_mode = Column(String(24), nullable=False, default='in_person')

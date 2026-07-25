@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 
 def iso(value):
@@ -58,12 +58,15 @@ def serialize_department(department):
 
 
 def serialize_meeting(meeting, include_nested=True):
+    stored_status = meeting.status.value if hasattr(meeting.status, 'value') else meeting.status
+    status = _display_meeting_status(stored_status, meeting.scheduled_at, getattr(meeting, 'end_time', None))
     payload = {
         'id': meeting.id,
         'title': meeting.title,
-        'scheduled_at': iso(meeting.scheduled_at),
+        'scheduled_at': _meeting_datetime_iso(meeting.scheduled_at),
+        'end_time': _meeting_datetime_iso(getattr(meeting, 'end_time', None)),
         'department': meeting.department,
-        'status': meeting.status.value if hasattr(meeting.status, 'value') else meeting.status,
+        'status': status,
         'notes': meeting.notes,
         'agenda': meeting.agenda,
         'meeting_mode': meeting.meeting_mode,
@@ -77,6 +80,42 @@ def serialize_meeting(meeting, include_nested=True):
         payload['attendees'] = [serialize_user(user) for user in getattr(meeting, 'attendees', [])]
         payload['action_items'] = [serialize_action_item(action_item) for action_item in getattr(meeting, 'action_items', [])]
     return payload
+
+
+def _as_utc(value):
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _meeting_datetime_iso(value):
+    utc_value = _as_utc(value)
+    return utc_value.isoformat().replace('+00:00', 'Z') if utc_value else None
+
+
+def _display_meeting_status(stored_status, scheduled_at, end_time=None):
+    """Return the status used by clients without mutating the persisted meeting."""
+    status = str(stored_status or '')
+    if status == 'cancelled':
+        return status
+
+    start_time = _as_utc(scheduled_at)
+    if not start_time:
+        return status
+
+    now = datetime.now(timezone.utc)
+    if now < start_time:
+        return 'upcoming'
+
+    end_time_utc = _as_utc(end_time)
+    if end_time_utc:
+        if now <= end_time_utc:
+            return 'ongoing'
+        return 'past'
+
+    return 'past'
 
 
 def serialize_email_template(template):

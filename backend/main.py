@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta, timezone
 import os
 
@@ -8,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, selectinload
 
+from .config import settings
 from .database import Base, SessionLocal, engine
 from .models import (
     ActionItem,
@@ -51,6 +53,7 @@ from .services.action_item_whatsapp_reminder_service import restore_reminders
 from .services.schema_migration_service import apply_additive_schema_updates
 
 
+logger = logging.getLogger(__name__)
 app = FastAPI(title='Bridge School Portal API')
 app.mount(
     "/uploads",
@@ -92,10 +95,11 @@ def _seed_demo_data(db: Session) -> None:
         existing = db.query(User).filter(User.email == email).first()
         if existing:
             return existing
+        demo_password = settings.demo_password or settings.secret_key
         user = User(
             name=name,
             email=email,
-            hashed_password=get_password_hash('password123'),
+            hashed_password=get_password_hash(demo_password),
             role=role,
             head_teacher=head_teacher,
         )
@@ -212,6 +216,11 @@ def _backfill_department_memberships(db: Session) -> None:
 
 @app.on_event('startup')
 def on_startup() -> None:
+    logger.info(
+        'Gemini AI configuration: API key %s; model=%s',
+        'configured' if settings.gemini_api_key else 'missing',
+        settings.gemini_model,
+    )
     Base.metadata.create_all(bind=engine)
     apply_additive_schema_updates(engine)
     ensure_scheduler_started()
