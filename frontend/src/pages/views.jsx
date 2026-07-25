@@ -5,8 +5,6 @@ import "@enzedonline/quill-blot-formatter2/dist/css/quill-blot-formatter2.css";
 Quill.register("modules/blotFormatter2", BlotFormatter);
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 Quill.register("modules/blotFormatter", BlotFormatter);
-import { useEffect, useMemo, useState } from 'react'
-import { useRef } from "react";
 import axios from "axios";
 import { jsPDF } from 'jspdf'
 import { format, formatDistanceToNow, parseISO } from 'date-fns'
