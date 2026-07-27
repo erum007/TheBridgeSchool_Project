@@ -138,11 +138,14 @@ def list_action_items(db: Session = Depends(get_db), current_user: User = Depend
 def create_action_item(payload: ActionItemCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.teacher))):
     if current_user.role == UserRole.teacher and not current_user.head_teacher:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Head teacher permission required')
+    due_date = date.fromisoformat(payload.due_date) if payload.due_date else None
+    if due_date and due_date < date.today():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Due date cannot be in the past')
     action_item = ActionItem(
         meeting_id=payload.meeting_id,
         description=payload.description,
         assigned_to=payload.assigned_to,
-        due_date=date.fromisoformat(payload.due_date) if payload.due_date else None,
+        due_date=due_date,
     )
     db.add(action_item)
     db.commit()
@@ -168,7 +171,10 @@ def update_action_item(action_item_id: int, payload: ActionItemUpdate, db: Sessi
     if payload.assigned_to is not None:
         action_item.assigned_to = payload.assigned_to
     if payload.due_date is not None:
-        action_item.due_date = date.fromisoformat(payload.due_date) if payload.due_date else None
+        due_date = date.fromisoformat(payload.due_date) if payload.due_date else None
+        if due_date and due_date < date.today():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Due date cannot be in the past')
+        action_item.due_date = due_date
     if 'whatsapp_reminder_frequency' in payload.model_fields_set:
         _set_whatsapp_reminder(action_item, payload.whatsapp_reminder_frequency, payload.whatsapp_reminder_at, current_user.id, db)
     db.commit()

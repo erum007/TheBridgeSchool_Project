@@ -6,7 +6,7 @@ from sqlalchemy import Boolean, Column, DateTime, Enum as SQLEnum, Integer, Stri
 from sqlalchemy.orm import relationship
 
 from ..database import Base
-from .common import UserRole, meeting_attendees, parent_student_links, user_departments
+from .common import UserRole, meeting_attendees, parent_student_links, teacher_student_links, user_departments
 
 
 class User(Base):
@@ -41,5 +41,12 @@ class User(Base):
         primaryjoin=id == parent_student_links.c.parent_id,
         secondaryjoin=id == parent_student_links.c.student_id,
         backref='guardians',
+    )
+    students_taught = relationship(
+        'User',
+        secondary=teacher_student_links,
+        primaryjoin=id == teacher_student_links.c.teacher_id,
+        secondaryjoin=id == teacher_student_links.c.student_id,
+        backref='teachers',
     )
     departments = relationship('Department', secondary=user_departments, back_populates='members')

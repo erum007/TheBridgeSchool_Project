@@ -49,6 +49,9 @@ def _validate_end_time(scheduled_at: datetime | None, end_time: datetime | None)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Start and end times are required')
     if end_time <= scheduled_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='End time must be after the start time')
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if scheduled_at <= now or end_time <= now:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Meeting start and end times must be in the future')
 
 
 def _resolve_audience(db: Session, payload: MeetingCreate) -> list[User]:

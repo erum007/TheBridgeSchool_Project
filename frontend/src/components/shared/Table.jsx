@@ -1,7 +1,7 @@
 import EmptyState from './EmptyState.jsx'
 import SkeletonRow from './SkeletonRow.jsx'
 
-export default function Table({ columns, data, loading, emptyMessage, emptyIcon, emptyAction, rowKey = 'id' }) {
+export default function Table({ columns, data, loading, emptyMessage, emptyIcon, emptyAction, rowKey = 'id', onRowClick }) {
   const tableShell = 'overflow-hidden rounded-xl border border-[var(--border-default)] bg-white'
   const headingClass = 'border-b border-[var(--border-default)] px-4 py-3 font-display text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]'
   const cellClass = 'border-b border-[#f0f2f8] px-4 py-3 text-sm text-[var(--text-primary)]'
@@ -47,7 +47,7 @@ export default function Table({ columns, data, loading, emptyMessage, emptyIcon,
         </thead>
         <tbody>
           {data.map((row) => (
-            <tr key={row[rowKey] ?? JSON.stringify(row)} className="transition-colors duration-100 hover:bg-[var(--bg-app)]">
+            <tr key={row[rowKey] ?? JSON.stringify(row)} onClick={() => onRowClick?.(row)} className={`transition-colors duration-100 hover:bg-[var(--bg-app)] ${onRowClick ? 'cursor-pointer' : ''}`}>
               {columns.map((column) => (
                 <td key={column.key} className={`${cellClass} ${column.align === 'right' ? 'text-right font-display font-semibold' : 'text-left'}`}>
                   {column.render ? column.render(row) : row[column.key]}

@@ -10,6 +10,7 @@ from .common import (
     WhatsAppStatus,
     meeting_attendees,
     parent_student_links,
+    teacher_student_links,
     user_departments,
 )
 from .department import Department

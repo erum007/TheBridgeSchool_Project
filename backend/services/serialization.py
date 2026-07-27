@@ -23,6 +23,22 @@ def serialize_user(user):
         'whatsapp_number': user.whatsapp_number,
         'department': user.department,
         'departments': [department.name for department in getattr(user, 'departments', [])],
+        'guardians': [
+            {'id': guardian.id, 'name': guardian.name, 'email': guardian.email}
+            for guardian in getattr(user, 'guardians', [])
+        ],
+        'children': [
+            {'id': child.id, 'name': child.name, 'email': child.email}
+            for child in getattr(user, 'children', [])
+        ],
+        'teachers': [
+            {'id': teacher.id, 'name': teacher.name, 'email': teacher.email}
+            for teacher in getattr(user, 'teachers', [])
+        ],
+        'students_taught': [
+            {'id': student.id, 'name': student.name, 'email': student.email}
+            for student in getattr(user, 'students_taught', [])
+        ],
         'is_active': user.is_active,
         'created_at': iso(user.created_at),
     }

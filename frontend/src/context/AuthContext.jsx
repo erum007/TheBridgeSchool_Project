@@ -13,19 +13,41 @@ export function AuthProvider({ children }) {
   const [initialising, setInitialising] = useState(true)
 
   useEffect(() => {
+    let active = true
     const storedToken = window.localStorage.getItem(tokenKey)
     const storedUser = window.localStorage.getItem(userKey)
-    if (storedToken) {
-      setToken(storedToken)
-    }
-    if (storedUser) {
+    if (storedToken) setToken(storedToken)
+    if (storedUser && !storedToken) {
       try {
         setUser(JSON.parse(storedUser))
       } catch {
         window.localStorage.removeItem(userKey)
       }
     }
-    setInitialising(false)
+    const restoreCurrentUser = async () => {
+      if (!storedToken) {
+        if (active) setInitialising(false)
+        return
+      }
+      try {
+        const currentUser = (await authApi.me()).data
+        if (active) {
+          setUser(currentUser)
+          window.localStorage.setItem(userKey, JSON.stringify(currentUser))
+        }
+      } catch {
+        if (active) {
+          setToken(null)
+          setUser(null)
+          window.localStorage.removeItem(tokenKey)
+          window.localStorage.removeItem(userKey)
+        }
+      } finally {
+        if (active) setInitialising(false)
+      }
+    }
+    restoreCurrentUser()
+    return () => { active = false }
   }, [])
 
   const login = async (payload) => {

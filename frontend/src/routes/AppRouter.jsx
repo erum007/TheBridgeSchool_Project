@@ -57,12 +57,12 @@ export default function AppRouter() {
       <Route path="/student/opportunities" element={<ProtectedRoute roles={[ 'student' ]}><OpportunityBoardView /></ProtectedRoute>} />
       <Route path="/student/settings" element={<ProtectedRoute roles={[ 'student' ]}><SettingsView /></ProtectedRoute>} />
 
-      <Route path="/parent/home" element={<ProtectedRoute roles={[ 'parent' ]}><StudentHomeView titlePrefix="Aisha's " /></ProtectedRoute>} />
-      <Route path="/parent/progress" element={<ProtectedRoute roles={[ 'parent' ]}><StudentProgressView titlePrefix="Aisha's " /></ProtectedRoute>} />
-      <Route path="/parent/results" element={<ProtectedRoute roles={[ 'parent' ]}><StudentResultHistoryView titlePrefix="Aisha's " /></ProtectedRoute>} />
-      <Route path="/parent/notices" element={<ProtectedRoute roles={[ 'parent' ]}><NoticeBoardView titlePrefix="Aisha's " /></ProtectedRoute>} />
-      <Route path="/parent/opportunities" element={<ProtectedRoute roles={[ 'parent' ]}><OpportunityBoardView titlePrefix="Aisha's " /></ProtectedRoute>} />
-      <Route path="/parent/settings" element={<ProtectedRoute roles={[ 'parent' ]}><SettingsView titlePrefix="Aisha's " /></ProtectedRoute>} />
+      <Route path="/parent/home" element={<ProtectedRoute roles={[ 'parent' ]}><StudentHomeView /></ProtectedRoute>} />
+      <Route path="/parent/progress" element={<ProtectedRoute roles={[ 'parent' ]}><StudentProgressView /></ProtectedRoute>} />
+      <Route path="/parent/results" element={<ProtectedRoute roles={[ 'parent' ]}><StudentResultHistoryView /></ProtectedRoute>} />
+      <Route path="/parent/notices" element={<ProtectedRoute roles={[ 'parent' ]}><NoticeBoardView /></ProtectedRoute>} />
+      <Route path="/parent/opportunities" element={<ProtectedRoute roles={[ 'parent' ]}><OpportunityBoardView /></ProtectedRoute>} />
+      <Route path="/parent/settings" element={<ProtectedRoute roles={[ 'parent' ]}><SettingsView /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
