@@ -8,7 +8,11 @@ export default function ProtectedRoute({ children }) {
   const location = useLocation()
 
   if (initialising) {
-    return null
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-app)] text-sm text-[var(--text-muted)]">
+        Loading portal...
+      </div>
+    )
   }
 
   if (!user) {

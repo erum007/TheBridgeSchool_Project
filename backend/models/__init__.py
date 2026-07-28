@@ -1,5 +1,5 @@
 from .action_item import ActionItem
-from .action_item_whatsapp_reminder import ActionItemWhatsAppReminder
+from .action_item_email_reminder import ActionItemEmailReminder
 from .common import (
     ActionItemStatus,
     EmailStatus,

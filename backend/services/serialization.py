@@ -45,7 +45,7 @@ def serialize_user(user):
 
 
 def serialize_action_item(action_item):
-    reminder = getattr(action_item, 'whatsapp_reminder', None)
+    reminder = getattr(action_item, 'email_reminder', None)
     return {
         'id': action_item.id,
         'meeting_id': action_item.meeting_id,
@@ -55,7 +55,7 @@ def serialize_action_item(action_item):
         'status': action_item.status.value if hasattr(action_item.status, 'value') else action_item.status,
         'due_date': iso(action_item.due_date),
         'created_at': iso(action_item.created_at),
-        'whatsapp_reminder': {
+        'email_reminder': {
             'frequency': reminder.frequency,
             'run_at': iso(reminder.run_at),
             'is_active': reminder.is_active,

@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../context/AuthContext.jsx'
 import { useApi } from '../hooks/useApi.js'
+import { formatApiError, isValidPortalPassword } from '../utils/apiErrors.js'
 import { dashboardApi } from '../api/dashboard.js'
 import { meetingsApi } from '../api/meetings.js'
 import { actionItemsApi } from '../api/actionItems.js'
@@ -112,7 +113,9 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   const [generatedActionItems, setGeneratedActionItems] = useState([])
   const [assigneeFilter, setAssigneeFilter] = useState('all')
   const [workspaceTab, setWorkspaceTab] = useState('meetings')
-  const [actionForm, setActionForm] = useState({ meeting_id: '', description: '', assigned_to: '', due_date: '', whatsapp_reminder_frequency: 'none', whatsapp_reminder_at: '' })
+  const [actionForm, setActionForm] = useState({ meeting_id: '', description: '', assigned_to: '', due_date: '', email_reminder_frequency: 'none', email_reminder_at: '' })
+  const [assigneeSearch, setAssigneeSearch] = useState('')
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
 
   const visibleMeetings = meetings.filter((meeting) => meeting.status)
   const pastMeetings = useMemo(() => meetings.filter((meeting) => meeting.status === 'past'), [meetings])
@@ -120,6 +123,11 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     if (assigneeFilter === 'all') return actionItems
     return actionItems.filter((item) => String(item.assigned_to) === String(assigneeFilter))
   }, [actionItems, assigneeFilter])
+  const assignableUsers = useMemo(() => users.filter((person) => person.is_active && ['admin', 'teacher', 'staff'].includes(person.role)), [users])
+  const assigneeMatches = useMemo(() => {
+    const query = assigneeSearch.trim().toLowerCase()
+    return (query ? assignableUsers.filter((person) => `${person.name} ${person.email} ${person.role}`.toLowerCase().includes(query)) : assignableUsers).slice(0, 8)
+  }, [assignableUsers, assigneeSearch])
 
   useEffect(() => {
     if (meetingsError) console.error('Failed to load meetings for the workspace', meetingsError)
@@ -280,7 +288,9 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     event.preventDefault()
     try {
       await actionItemsApi.create(actionForm)
-      setActionForm({ meeting_id: '', description: '', assigned_to: '', due_date: '', whatsapp_reminder_frequency: 'none', whatsapp_reminder_at: '' })
+      setActionForm({ meeting_id: '', description: '', assigned_to: '', due_date: '', email_reminder_frequency: 'none', email_reminder_at: '' })
+      setAssigneeSearch('')
+      setAssigneePickerOpen(false)
       refetchActions()
       toast.success('Action item created')
     } catch (error) {
@@ -379,7 +389,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                     <label className="portal-label block">Filter by assignee</label>
                     <select className="portal-input mt-1" value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}>
                       <option value="all">All assignees</option>
-                      {users.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                      {assignableUsers.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -390,29 +400,31 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                     {meetings.map((meeting) => <option key={meeting.id} value={meeting.id}>{meeting.title}</option>)}
                   </select>
                   <input className="portal-input" placeholder="Action item description" value={actionForm.description} onChange={(event) => setActionForm({ ...actionForm, description: event.target.value })} />
-                  <select className="portal-input" value={actionForm.assigned_to} onChange={(event) => setActionForm({ ...actionForm, assigned_to: event.target.value })}>
-                    <option value="">Assign to</option>
-                    {users.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-                  </select>
-                  <select className="portal-input" value={actionForm.whatsapp_reminder_frequency} onChange={(event) => setActionForm({ ...actionForm, whatsapp_reminder_frequency: event.target.value })}>
-                    <option value="none">No WhatsApp reminder</option>
-                    <option value="hourly">WhatsApp: hourly</option>
-                    <option value="daily">WhatsApp: daily</option>
-                    <option value="weekly">WhatsApp: weekly</option>
-                    <option value="custom">WhatsApp: once at custom time</option>
-                  </select>
-                  <div className="flex gap-3">
-                    <input type="date" min={todayInputValue()} className="portal-input" value={actionForm.due_date} onChange={(event) => setActionForm({ ...actionForm, due_date: event.target.value })} />
-                    <button type="submit" className="portal-button-primary whitespace-nowrap">Add Action Item</button>
+                  <div className="relative">
+                    <input className="portal-input" placeholder="Search staff or teacher to assign" value={assigneeSearch} onFocus={() => setAssigneePickerOpen(true)} onBlur={() => setAssigneePickerOpen(false)} onChange={(event) => { setAssigneeSearch(event.target.value); setActionForm({ ...actionForm, assigned_to: '' }) }} />
+                    {assigneePickerOpen ? <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[var(--border-default)] bg-white shadow-lg">{assigneeMatches.length ? assigneeMatches.map((person) => <button key={person.id} type="button" className="block w-full px-3 py-2 text-left text-sm hover:bg-[var(--bg-app)]" onMouseDown={(event) => { event.preventDefault(); setActionForm({ ...actionForm, assigned_to: String(person.id) }); setAssigneeSearch(`${person.name} — ${person.role}`); setAssigneePickerOpen(false) }}><span className="font-medium text-[var(--text-primary)]">{person.name}</span><span className="ml-2 text-xs text-[var(--text-muted)]">{person.role} · {person.email}</span></button>) : <div className="px-3 py-2 text-sm text-[var(--text-muted)]">No eligible people found.</div>}</div> : null}
                   </div>
-                  {actionForm.whatsapp_reminder_frequency !== 'none' ? (
+                  <select className="portal-input" value={actionForm.email_reminder_frequency} onChange={(event) => setActionForm({ ...actionForm, email_reminder_frequency: event.target.value })}>
+                    <option value="none">No email reminder</option>
+                    <option value="hourly">Email: hourly</option>
+                    <option value="daily">Email: daily</option>
+                    <option value="weekly">Email: weekly</option>
+                    <option value="custom">Email: once at custom time</option>
+                  </select>
+                  <div className="flex flex-col gap-2">
+                    <label className="portal-label block">Action due date</label>
+                    <input type="date" min={todayInputValue()} className="portal-input" value={actionForm.due_date} onChange={(event) => setActionForm({ ...actionForm, due_date: event.target.value })} />
+                  </div>
+                  <button type="submit" className="portal-button-primary whitespace-nowrap">Add Action Item</button>
+                  {actionForm.email_reminder_frequency !== 'none' ? (
                     <div className="lg:col-span-2">
-                      <label className="portal-label block">First reminder date and time (UTC)</label>
-                      <input type="datetime-local" min={futureDateTimeInputValue()} required className="portal-input mt-1" value={actionForm.whatsapp_reminder_at} onChange={(event) => setActionForm({ ...actionForm, whatsapp_reminder_at: event.target.value })} />
+                      <label className="portal-label block">When should the first reminder be sent?</label>
+                      <input type="datetime-local" min={futureDateTimeInputValue()} required className="portal-input mt-1" value={actionForm.email_reminder_at} onChange={(event) => setActionForm({ ...actionForm, email_reminder_at: event.target.value })} />
+                      <p className="mt-2 text-xs text-[var(--text-muted)]">This is separate from the action due date. The reminder time controls when the first email is sent, while the due date controls the task deadline.</p>
                     </div>
                   ) : null}
-                  {actionForm.whatsapp_reminder_frequency !== 'none' ? (
-                    <p className="lg:col-span-2 text-xs text-[var(--text-muted)]">The assignee must have a WhatsApp number saved in their profile. Reminders stop when the action item is marked done.</p>
+                  {actionForm.email_reminder_frequency !== 'none' ? (
+                    <p className="lg:col-span-2 text-xs text-[var(--text-muted)]">Reminders are sent to the assignee&apos;s registered email address and stop once the action item is marked done.</p>
                   ) : null}
                 </form>
               </div>
@@ -1478,6 +1490,10 @@ export function PortalManagementView() {
       toast.error('Please enter a valid email address')
       return
     }
+    if (!isValidPortalPassword(userForm.password)) {
+      toast.error('Temporary password must be 12+ characters with uppercase, lowercase, a number, and a symbol')
+      return
+    }
     try {
       if (userForm.role === 'student') {
         if (guardians.some((guardian) => !guardian.name.trim() || !guardian.email.trim())) {
@@ -1497,7 +1513,7 @@ export function PortalManagementView() {
       refetchUsers()
       refetchDepartments()
     } catch (error) {
-      toast.error(error?.response?.data?.detail || 'Could not create user')
+      toast.error(formatApiError(error, 'Could not create user'))
     }
   }
 
@@ -1508,7 +1524,7 @@ export function PortalManagementView() {
       toast.success('User profile updated')
       refetchUsers()
     } catch (error) {
-      toast.error(error?.response?.data?.detail || 'Could not update profile')
+      toast.error(formatApiError(error, 'Could not update profile'))
     }
   }
 
@@ -1522,8 +1538,7 @@ export function PortalManagementView() {
       refetchUsers()
       refetchDepartments()
     } catch (error) {
-      const detail = error?.response?.data?.detail
-      toast.error(typeof detail === 'object' ? detail.message : detail || 'Could not import users')
+      toast.error(formatApiError(error, 'Could not import users'))
     }
   }
 
@@ -1717,8 +1732,8 @@ export function PortalManagementView() {
                 <div className="space-y-3">
                   {departments.map((department) => (
                     <div key={department.id} className="portal-panel">
-                      <div className="flex items-center justify-between"><div className="font-medium text-[var(--text-primary)]">{department.name}</div><span className="text-xs text-[var(--text-muted)]">{department.members.length} member{department.members.length === 1 ? '' : 's'}</span></div>
-                      <div className="mt-3 flex flex-wrap gap-2">{department.members.length ? department.members.map((member) => <span key={member.id} className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-xs text-[var(--text-secondary)]">{member.name}<button type="button" className="text-[var(--brand-red)]" onClick={() => removeDepartmentMember(department.id, member.id)} aria-label={`Remove ${member.name}`}>×</button></span>) : <span className="text-sm text-[var(--text-muted)]">No members yet.</span>}</div>
+                      <div className="flex items-center justify-between"><div className="font-medium text-[var(--text-primary)]">{department.name}</div><span className="text-xs text-[var(--text-muted)]">{department.members?.length || 0} member{(department.members?.length || 0) === 1 ? '' : 's'}</span></div>
+                      <div className="mt-3 flex flex-wrap gap-2">{department.members?.length ? department.members.map((member) => <span key={member.id} className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-xs text-[var(--text-secondary)]">{member.name}<button type="button" className="text-[var(--brand-red)]" onClick={() => removeDepartmentMember(department.id, member.id)} aria-label={`Remove ${member.name}`}>×</button></span>) : <span className="text-sm text-[var(--text-muted)]">No members yet.</span>}</div>
                     </div>
                   ))}
                   {!departments.length ? <EmptyState title="No departments or domains" message="Create one to organise staff, committees, or other groups." /> : null}
