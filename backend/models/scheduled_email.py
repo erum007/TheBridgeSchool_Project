@@ -17,6 +17,7 @@ class ScheduledEmail(Base):
     recipient_group = Column(String(120), nullable=False)
     subject = Column(String(255), nullable=False)
     body = Column(Text, nullable=False)
+    preheader = Column(String(255), nullable=True)
     attachments = Column(JSON, nullable=True, default=list)
     scheduled_at = Column(DateTime, nullable=True)
     sent_at = Column(DateTime, nullable=True)

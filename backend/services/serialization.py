@@ -125,9 +125,16 @@ def serialize_email_template(template):
         'subject': template.subject,
         'body': template.body,
         'attachments': template.attachments or [],
+        'preheader': template.preheader or '',
+        'category': template.category or '',
+        'tags': template.tags or [],
+        'is_favorite': bool(template.is_favorite),
+        'publication_status': template.publication_status,
+        'version_history': template.version_history or [],
         'created_by': template.created_by,
         'created_by_name': getattr(getattr(template, 'created_by_user', None), 'name', None),
         'created_at': iso(template.created_at),
+        'updated_at': iso(template.updated_at),
     }
 
 
@@ -138,6 +145,7 @@ def serialize_scheduled_email(email):
         'recipient_group': email.recipient_group,
         'subject': email.subject,
         'body': email.body,
+        'preheader': email.preheader or '',
         'attachments': email.attachments or [],
         'scheduled_at': iso(email.scheduled_at),
         'sent_at': iso(email.sent_at),

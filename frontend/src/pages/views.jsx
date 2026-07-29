@@ -5,8 +5,34 @@ import "@enzedonline/quill-blot-formatter2/dist/css/quill-blot-formatter2.css";
 Quill.register("modules/blotFormatter2", BlotFormatter);
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 Quill.register("modules/blotFormatter", BlotFormatter);
+<<<<<<< Updated upstream
 import { useEffect, useMemo, useState } from 'react'
 import { useRef } from "react";
+=======
+const BlockEmbed = Quill.import('blots/block/embed')
+
+class DividerBlot extends BlockEmbed {
+  static blotName = 'divider'
+  static tagName = 'hr'
+}
+class EmailButtonBlot extends BlockEmbed {
+  static blotName = 'emailButton'
+  static tagName = 'div'
+  static className = 'email-button-block'
+  static create(value) {
+    const node = super.create()
+    const link = document.createElement('a')
+    link.href = value.url
+    link.textContent = value.text
+    link.style.cssText = `display:inline-block;padding:12px 22px;border-radius:6px;background:${value.color || '#1b2b6b'};color:#fff;text-decoration:none;font-weight:700;`
+    node.appendChild(link)
+    return node
+  }
+  static value(node) { const link = node.querySelector('a'); return { text: link?.textContent, url: link?.href } }
+}
+Quill.register(DividerBlot)
+Quill.register(EmailButtonBlot)
+>>>>>>> Stashed changes
 import axios from "axios";
 import { jsPDF } from 'jspdf'
 import { format, formatDistanceToNow, parseISO } from 'date-fns'
@@ -433,26 +459,56 @@ export function EmailModuleView() {
   const { data: emails = [], loading: emailsLoading, refetch: refetchEmails } = useApi(() => emailsApi.list(), [])
   const { data: templates = [], refetch: refetchTemplates } = useApi(() => emailsApi.templates(), [])
   const [tab, setTab] = useState('dashboard')
-  const [compose, setCompose] = useState({ recipient_group: 'parents', individual_emails: '', template_id: '', subject: '', body: '', scheduled_at: '', attachments: [] })
+  const emptyCompose = { recipient_group: 'parents', individual_emails: '', template_id: '', subject: '', preheader: '', body: '', scheduled_at: '', attachments: [] }
+  const emptyTemplate = { name: '', subject: '', preheader: '', body: '', attachments: [], category: '', tags: [], is_favorite: false, publication_status: 'published' }
+  const [compose, setCompose] = useState(emptyCompose)
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [editingDraftId, setEditingDraftId] = useState(null)
   const [deliveryMode, setDeliveryMode] = useState('now')
-  const [templateForm, setTemplateForm] = useState({ name: '', subject: '', body: '', attachments: [] })
+  const [templateForm, setTemplateForm] = useState(emptyTemplate)
   const [editingTemplateId, setEditingTemplateId] = useState(null);
   const [templatePendingDeletion, setTemplatePendingDeletion] = useState(null)
   const [draftPendingDeletion, setDraftPendingDeletion] = useState(null)
-  const [templateEditorKey, setTemplateEditorKey] = useState(0)
   const attachmentTargetRef = useRef('compose')
   const draftEmails = emails.filter((item) => item.status === 'draft')
   const scheduledEmails = emails.filter((item) => item.status === 'scheduled')
   const sentEmails = emails.filter((item) => item.status === 'sent')
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewTarget, setPreviewTarget] = useState('template')
+  const [previewDevice, setPreviewDevice] = useState('desktop')
+  const [previewDark, setPreviewDark] = useState(false)
+  const [templateSearch, setTemplateSearch] = useState('')
+  const [templateCategory, setTemplateCategory] = useState('')
+  const [editorDialog, setEditorDialog] = useState(null)
+  const [dialogForm, setDialogForm] = useState({})
+  const [historyTemplate, setHistoryTemplate] = useState(null)
+  const pendingEditorRef = useRef(null)
+  const pendingImageRef = useRef(null)
+  const testSourceRef = useRef(null)
+  const filteredTemplates = templates.filter((item) => {
+    const query = templateSearch.toLowerCase()
+    const tags = Array.isArray(item.tags) ? item.tags : []
+    return (!query || `${item.name || ''} ${item.subject || ''} ${tags.join(' ')}`.toLowerCase().includes(query)) && (!templateCategory || item.category === templateCategory)
+  })
   const minimumScheduleTime = useMemo(() => {
     const now = new Date()
     now.setMinutes(now.getMinutes() + 1, 0, 0)
     const offset = now.getTimezoneOffset() * 60_000
     return new Date(now.getTime() - offset).toISOString().slice(0, 16)
   }, [])
+  useEffect(() => {
+    const labels = { document: 'Attach file', table: 'Insert table', button: 'Insert button', divider: 'Insert divider', variable: 'Insert personalization', blocks: 'Insert content block', undo: 'Undo', redo: 'Redo' }
+    const applyLabels = () => Object.entries(labels).forEach(([name, label]) => {
+      document.querySelectorAll(`.email-editor .ql-${name}`).forEach((button) => {
+        button.title = label
+        button.setAttribute('aria-label', label)
+      })
+    })
+    applyLabels()
+    const observer = new MutationObserver(applyLabels)
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [tab])
   const imageHandler = useCallback(function imageHandler() {
     const editor = this.quill;
     const input = document.createElement("input");
@@ -469,8 +525,9 @@ export function EmailModuleView() {
       try {
         const response = await emailsApi.uploadImage(formData);
         const range = editor.getSelection(true);
-        editor.insertEmbed(range.index, "image", response.data.url, "user");
-        editor.setSelection(range.index + 1, 0, "silent");
+        pendingImageRef.current = { editor, range, url: response.data.url }
+        setDialogForm({ alt: file.name.replace(/\.[^.]+$/, '') })
+        setEditorDialog('image')
       } catch (error) {
         console.error("Image upload failed", error);
         toast.error("Image upload failed.");
@@ -510,20 +567,53 @@ export function EmailModuleView() {
     input.click();
   }, []);
 
+  const insertAtSelection = (editor, blot, value) => {
+    const range = editor.getSelection(true)
+    editor.insertText(range.index, '\n', 'silent')
+    editor.insertEmbed(range.index + 1, blot, value, 'user')
+    editor.setSelection(range.index + 2, 0, 'silent')
+  }
+  const tableHandler = useCallback(function tableHandler() {
+    pendingEditorRef.current = this.quill
+    setDialogForm({ rows: 3, cols: 3 })
+    setEditorDialog('table')
+  }, [])
+  const buttonHandler = useCallback(function buttonHandler() {
+    pendingEditorRef.current = this.quill
+    setDialogForm({ text: 'View details', url: 'https://', color: '#1b2b6b' })
+    setEditorDialog('button')
+  }, [])
+  const dividerHandler = useCallback(function dividerHandler() { insertAtSelection(this.quill, 'divider', true) }, [])
+  const variableHandler = useCallback(function variableHandler() {
+    pendingEditorRef.current = this.quill
+    setDialogForm({ variable: 'student_name' })
+    setEditorDialog('variable')
+  }, [])
+  const blocksHandler = useCallback(function blocksHandler() {
+    pendingEditorRef.current = this.quill
+    setDialogForm({ block: 'announcement' })
+    setEditorDialog('blocks')
+  }, [])
+  const undoHandler = useCallback(function undoHandler() { this.quill.history.undo() }, [])
+  const redoHandler = useCallback(function redoHandler() { this.quill.history.redo() }, [])
+
   // ReactQuill recreates its editor when `modules` changes. Keeping this object stable
   // prevents the formatter from being destroyed after the first resize pointer event.
   const quillModules = useMemo(() => ({
     toolbar: {
       container: [
         [{ header: [1, 2, 3, false] }],
-        ["bold", "italic", "underline"],
+        [{ font: [] }, { size: ['small', false, 'large', 'huge'] }],
+        ["bold", "italic", "underline", "strike"],
         [{ color: [] }, { background: [] }],
         [{ list: "ordered" }, { list: "bullet" }],
-        [{ align: [] }],
-        ["link", "image", "document"],
+        [{ indent: '-1' }, { indent: '+1' }, { align: [] }, { direction: 'rtl' }],
+        [{ script: 'sub' }, { script: 'super' }, 'blockquote'],
+        ["link", "image", "document", "table", "button", "divider", "variable", "blocks"],
+        ['undo', 'redo'],
         ["clean"],
       ],
-      handlers: { image: imageHandler, document: documentHandler },
+      handlers: { image: imageHandler, document: documentHandler, table: tableHandler, button: buttonHandler, divider: dividerHandler, variable: variableHandler, blocks: blocksHandler, undo: undoHandler, redo: redoHandler },
     },
     blotFormatter2: {
       resize: {
@@ -533,7 +623,9 @@ export function EmailModuleView() {
       },
       image: { autoHeight: true },
     },
-  }), [documentHandler, imageHandler]);
+    history: { delay: 500, maxStack: 100, userOnly: true },
+    table: true,
+  }), [blocksHandler, buttonHandler, dividerHandler, documentHandler, imageHandler, redoHandler, tableHandler, undoHandler, variableHandler]);
   useEffect(() => {
     if (compose.template_id) return
 
@@ -560,12 +652,18 @@ export function EmailModuleView() {
       toast.error('Schedule time must be in the future')
       return
     }
+    const issues = emailQualityIssues(compose)
+    if (issues.some((issue) => issue.level === 'error')) {
+      toast.error(issues.find((issue) => issue.level === 'error').message)
+      return
+    }
     try {
       const payload = {
         ...compose,
         recipient_group: compose.recipient_group === 'individual' ? individualRecipients.join(',') : compose.recipient_group,
         template_id: compose.template_id || null,
         scheduled_at: deliveryMode === 'schedule' ? compose.scheduled_at : null,
+        draft_id: editingDraftId,
       }
       if (deliveryMode === 'schedule') {
         await emailsApi.schedule(payload)
@@ -573,7 +671,7 @@ export function EmailModuleView() {
         await emailsApi.send(payload)
       }
       toast.success('Email saved')
-      setCompose({ recipient_group: 'parents', individual_emails: '', template_id: '', subject: '', body: '', scheduled_at: '', attachments: [] })
+      setCompose(emptyCompose)
       setSelectedTemplateId('')
       setEditingDraftId(null)
       setDeliveryMode('now')
@@ -604,7 +702,7 @@ export function EmailModuleView() {
         setEditingDraftId(response.data.id)
         toast.success('Draft saved')
       }
-      setCompose({ recipient_group: 'parents', individual_emails: '', template_id: '', subject: '', body: '', scheduled_at: '', attachments: [] })
+      setCompose(emptyCompose)
       setSelectedTemplateId('')
       setEditingDraftId(null)
       setDeliveryMode('now')
@@ -622,6 +720,7 @@ export function EmailModuleView() {
       individual_emails: recipientGroup === 'individual' ? draft.recipient_group : '',
       template_id: draft.template_id ? String(draft.template_id) : '',
       subject: draft.subject,
+      preheader: draft.preheader || '',
       body: draft.body,
       scheduled_at: '',
       attachments: draft.attachments || [],
@@ -638,7 +737,7 @@ export function EmailModuleView() {
       await emailsApi.remove(draftPendingDeletion.id)
       if (editingDraftId === draftPendingDeletion.id) {
         setEditingDraftId(null)
-        setCompose({ recipient_group: 'parents', individual_emails: '', template_id: '', subject: '', body: '', scheduled_at: '', attachments: [] })
+        setCompose(emptyCompose)
         setSelectedTemplateId('')
       }
       toast.success('Draft deleted')
@@ -671,10 +770,8 @@ export function EmailModuleView() {
     }
 
     setEditingTemplateId(null);
-    setTemplateForm({ name: '', subject: '', body: '', attachments: [] });
-    setTemplateEditorKey((current) => current + 1);
-
-    refetchTemplates();
+    setTemplateForm(emptyTemplate);
+    await refetchTemplates();
     } catch (error) {
       console.log(error)
       console.log(error.response)
@@ -692,7 +789,7 @@ export function EmailModuleView() {
 
       if (editingTemplateId === template.id) {
         setEditingTemplateId(null)
-        setTemplateForm({ name: '', subject: '', body: '', attachments: [] })
+        setTemplateForm(emptyTemplate)
       }
       if (String(compose.template_id) === String(template.id)) {
         setSelectedTemplateId('')
@@ -712,6 +809,76 @@ export function EmailModuleView() {
     } finally {
       setTemplatePendingDeletion(null)
     }
+  }
+
+  const sendTestEmail = (source) => {
+    testSourceRef.current = source
+    setDialogForm({ toEmail: '' })
+    setEditorDialog('test')
+  }
+
+  const closeEditorDialog = () => {
+    setEditorDialog(null)
+    setDialogForm({})
+    pendingEditorRef.current = null
+    pendingImageRef.current = null
+  }
+
+  const applyEditorDialog = async () => {
+    const editor = pendingEditorRef.current
+    if (editorDialog === 'table') {
+      const rows = Math.min(12, Math.max(1, Number(dialogForm.rows)))
+      const cols = Math.min(8, Math.max(1, Number(dialogForm.cols)))
+      const tableModule = editor.getModule('table')
+      if (!tableModule?.insertTable) return toast.error('The table editor is unavailable')
+      tableModule.insertTable(rows, cols)
+    } else if (editorDialog === 'button') {
+      if (!dialogForm.text?.trim() || !/^https?:\/\//i.test(dialogForm.url || '')) return toast.error('Enter button text and a valid http(s) link')
+      insertAtSelection(editor, 'emailButton', dialogForm)
+    } else if (editorDialog === 'variable') {
+      const range = editor.getSelection(true)
+      editor.insertText(range.index, `{{${dialogForm.variable}}}`, { bold: true, color: '#1b2b6b' }, 'user')
+    } else if (editorDialog === 'blocks') {
+      const blocks = {
+        header: '<div style="text-align:center;padding:20px;background:#1b2b6b;color:#fff;"><h1 style="margin:0;">The Bridge School</h1></div>',
+        announcement: '<div style="padding:18px;border-left:5px solid #c62828;background:#fff5f5;"><h2 style="margin-top:0;">Important announcement</h2><p>Add announcement details here.</p></div>',
+        event: '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr><td style="padding:16px;background:#f2f4f8;"><strong>Event</strong><br>Date: {{date}}<br>Location: Add location</td></tr></table>',
+        'two-column': '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr><td width="50%" valign="top" style="padding:12px;border:1px solid #ddd;">Left column</td><td width="50%" valign="top" style="padding:12px;border:1px solid #ddd;">Right column</td></tr></table>',
+        signature: '<p>Kind regards,<br><strong>{{teacher_name}}</strong><br>The Bridge School</p>',
+        footer: '<div style="padding:18px;text-align:center;background:#f2f4f8;color:#5b6170;font-size:12px;">The Bridge School · {{school_email}}<br><a href="{{preferences_url}}">Email preferences</a></div>',
+      }
+      const range = editor.getSelection(true)
+      editor.clipboard.dangerouslyPasteHTML(range.index, blocks[dialogForm.block], 'user')
+    } else if (editorDialog === 'image') {
+      const pending = pendingImageRef.current
+      pending.editor.insertEmbed(pending.range.index, 'image', pending.url, 'user')
+      const [leaf] = pending.editor.getLeaf(pending.range.index)
+      if (leaf?.domNode) leaf.domNode.setAttribute('alt', dialogForm.alt || '')
+      pending.editor.setSelection(pending.range.index + 1, 0, 'silent')
+    } else if (editorDialog === 'test') {
+      if (!/^\S+@\S+\.\S+$/.test(dialogForm.toEmail || '')) return toast.error('Enter a valid email address')
+      const source = testSourceRef.current
+      try {
+        await emailsApi.sendTest({ to_email: dialogForm.toEmail, subject: source.subject, body: source.body, preheader: source.preheader })
+        toast.success('Test email sent')
+      } catch (error) { toast.error(error?.response?.data?.detail || 'Could not send test email'); return }
+    }
+    closeEditorDialog()
+  }
+
+  function emailQualityIssues(source) {
+    const issues = []
+    const visible = source.body.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim()
+    if (!source.subject.trim()) issues.push({ level: 'error', message: 'Subject is required' })
+    if (!visible && !/<(?:img|table)\b/i.test(source.body)) issues.push({ level: 'error', message: 'Email body is required' })
+    if (source.subject.length > 70) issues.push({ level: 'warning', message: 'Subject is longer than 70 characters' })
+    if ((source.preheader || '').length > 140) issues.push({ level: 'warning', message: 'Preheader is longer than 140 characters' })
+    if (/<img\b(?![^>]*\balt=)[^>]*>/i.test(source.body)) issues.push({ level: 'warning', message: 'Some images are missing alt text' })
+    if (/href=["'](?!https?:\/\/|mailto:|tel:|{{)[^"']*["']/i.test(source.body)) issues.push({ level: 'warning', message: 'Some links may be invalid' })
+    const unresolved = source.body.match(/{{[^}]+}}/g) || []
+    const supported = ['{{recipient_email}}', '{{school_name}}', '{{school_email}}', '{{date}}', '{{student_name}}', '{{parent_name}}', '{{teacher_name}}', '{{class_name}}', '{{student_id}}', '{{preferences_url}}']
+    if (unresolved.some((token) => !supported.includes(token))) issues.push({ level: 'warning', message: 'Some personalization variables need recipient data not currently available' })
+    return issues
   }
 
   return (
@@ -813,6 +980,7 @@ export function EmailModuleView() {
                             ...current,
                             template_id: '',
                             subject: '',
+                            preheader: '',
                             body: '',
                             attachments: [],
                           }));
@@ -825,6 +993,7 @@ export function EmailModuleView() {
                             ...current,
                             template_id: id,
                             subject: template.subject,
+                            preheader: template.preheader || '',
                             body: template.body,
                             attachments: template.attachments || [],
                           }));
@@ -844,6 +1013,7 @@ export function EmailModuleView() {
                   <label className="portal-label block">Subject</label>
                   <input className="portal-input mt-1" value={compose.subject} onChange={(event) => setCompose({ ...compose, subject: event.target.value })} />
                 </div>
+                <div><label className="portal-label block">Inbox preview text</label><input maxLength={255} className="portal-input mt-1" value={compose.preheader} onChange={(event) => setCompose({ ...compose, preheader: event.target.value })} placeholder="Short summary shown beside the subject" /></div>
                 <div>
                   <label className="portal-label block">Delivery</label>
                   <div className="mt-1 flex flex-wrap gap-4 text-sm text-[var(--text-primary)]">
@@ -864,8 +1034,11 @@ export function EmailModuleView() {
                   onFocus={() => { attachmentTargetRef.current = 'compose' }}
                 />
                 {compose.attachments.length > 0 && <AttachmentList attachments={compose.attachments} onRemove={(storedFilename) => setCompose((current) => ({ ...current, attachments: current.attachments.filter((attachment) => attachment.stored_filename !== storedFilename) }))} />}
+                {emailQualityIssues(compose).length > 0 && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{emailQualityIssues(compose).map((issue) => <div key={issue.message}>• {issue.message}</div>)}</div>}
               </div>
                 <div className="lg:col-span-2 flex justify-end gap-3">
+                  <button type="button" className="portal-button-secondary" onClick={() => { setPreviewTarget('compose'); setPreviewOpen(true) }}>Preview</button>
+                  <button type="button" className="portal-button-secondary" onClick={() => sendTestEmail(compose)}>Send Test</button>
                   <button type="button" className="portal-button-secondary" onClick={saveDraft}>Save Draft</button>
                   <button type="submit" className="portal-button-primary">{deliveryMode === 'schedule' ? 'Schedule Email' : 'Send Now'}</button>
                 </div>
@@ -876,50 +1049,14 @@ export function EmailModuleView() {
             id: 'templates',
             label: 'Email Templates',
             content: (
-              <div className="grid gap-6 lg:grid-cols-2">
-                <Table
-                  data={templates}
-                  loading={false}
-                  columns={[
-                  { key: "name", label: "Name" },
-                  { key: "subject", label: "Subject Preview" },
-                  { key: "created_by_name", label: "Created By" },
-
-                  {
-                    key: "actions",
-                    label: "Actions",
-                    render: (row) => (
-                      <div className="flex gap-2">
-                       <button
-                        onClick={() => {
-
-                            setEditingTemplateId(row.id);
-
-                            setTemplateForm({
-                                name: row.name,
-                                subject: row.subject,
-                                body: row.body,
-                                attachments: row.attachments || [],
-                            });
-
-                        }}
-                      >
-                        Edit
-                    </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setTemplatePendingDeletion(row)}
-                          className="text-red-600 hover:underline"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ),
-                  },
-                ]}
-                  emptyMessage="No templates created yet."
-                />
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,9fr)_minmax(360px,11fr)]">
+                <input className="portal-input w-full" placeholder="Search templates…" value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} />
+                <select className="portal-input w-full" value={templateCategory} onChange={(event) => setTemplateCategory(event.target.value)}><option value="">All categories</option>{[...new Set(templates.map((item) => item.category).filter(Boolean))].map((category) => <option key={category}>{category}</option>)}</select>
+                <div className="min-w-0 max-w-full [&>div]:overflow-hidden"><Table data={filteredTemplates} loading={false} columns={[
+                  { key: 'name', label: 'Template Name' },
+                  { key: 'subject', label: 'Subject' },
+                  { key: 'actions', label: 'Actions', render: (row) => <div className="flex gap-1.5 whitespace-nowrap"><button type="button" className="portal-button-secondary px-3 py-2" onClick={() => { setEditingTemplateId(row.id); setTemplateForm({ name: row.name, subject: row.subject, preheader: row.preheader || '', body: row.body, attachments: row.attachments || [], category: row.category || '', tags: Array.isArray(row.tags) ? row.tags : [], is_favorite: row.is_favorite, publication_status: row.publication_status || 'published' }) }}>Edit</button><button type="button" onClick={() => setTemplatePendingDeletion(row)} className="portal-button-ghost px-2 py-2 text-[var(--brand-red)]">Delete</button></div> },
+                ]} emptyMessage="No templates created yet." /></div>
                 <form className="space-y-4 portal-panel" onSubmit={submitTemplate}>
                   <div>
                     <label className="portal-label block">Name</label>
@@ -929,6 +1066,9 @@ export function EmailModuleView() {
                     <label className="portal-label block">Subject</label>
                     <input className="portal-input mt-1" value={templateForm.subject} onChange={(event) => setTemplateForm({ ...templateForm, subject: event.target.value })} />
                   </div>
+                  <div><label className="portal-label block">Inbox preview text</label><input className="portal-input mt-1" maxLength={255} value={templateForm.preheader} onChange={(event) => setTemplateForm({ ...templateForm, preheader: event.target.value })} /></div>
+                  <div><label className="portal-label block">Category</label><input className="portal-input mt-1" value={templateForm.category} onChange={(event) => setTemplateForm({ ...templateForm, category: event.target.value })} placeholder="Announcements" /></div>
+                  <div><label className="portal-label block">Tags</label><input className="portal-input mt-1" value={templateForm.tags.join(', ')} onChange={(event) => setTemplateForm({ ...templateForm, tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) })} placeholder="parents, weekly, academic" /></div>
                   {/* <div>
                     <label className="portal-label block">Body</label>
                     <textarea className="portal-input mt-1 min-h-44" placeholder="Use [Student Name], [Date] placeholders." value={templateForm.body} onChange={(event) => setTemplateForm({ ...templateForm, body: event.target.value })} />
@@ -938,7 +1078,6 @@ export function EmailModuleView() {
 
                   <div className="mt-2">
                     <ReactQuill
-                    key={templateEditorKey}
                     theme="snow"
                     modules={quillModules}
                     value={templateForm.body}
@@ -947,6 +1086,7 @@ export function EmailModuleView() {
                     onFocus={() => { attachmentTargetRef.current = 'template' }}
                 />
                 {templateForm.attachments.length > 0 && <AttachmentList attachments={templateForm.attachments} onRemove={(storedFilename) => setTemplateForm((current) => ({ ...current, attachments: current.attachments.filter((attachment) => attachment.stored_filename !== storedFilename) }))} />}
+                {emailQualityIssues(templateForm).length > 0 && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{emailQualityIssues(templateForm).map((issue) => <div key={issue.message}>• {issue.message}</div>)}</div>}
                 </div>
               </div>
                   {/* <button type="submit" className="portal-button-primary">Create Template</button>
@@ -965,10 +1105,11 @@ export function EmailModuleView() {
                   <button
                     type="button"
                     className="portal-button-secondary"
-                    onClick={() => setPreviewOpen(true)}
+                    onClick={() => { setPreviewTarget('template'); setPreviewOpen(true) }}
                   >
                     Preview
                   </button>
+                  <button type="button" className="portal-button-secondary" onClick={() => sendTestEmail(templateForm)}>Send Test</button>
 
                 </div>
                     {editingTemplateId && (
@@ -978,12 +1119,7 @@ export function EmailModuleView() {
 
                           setEditingTemplateId(null);
 
-                          setTemplateForm({
-                              name: "",
-                              subject: "",
-                              body: "",
-                              attachments: [],
-                          });
+                          setTemplateForm(emptyTemplate);
 
                       }}
                   >
@@ -1000,29 +1136,30 @@ export function EmailModuleView() {
     isOpen={previewOpen}
     onClose={() => setPreviewOpen(false)}
     title="Email Preview"
+    size="large"
 >
     <div className="min-w-0 space-y-4">
-
+        <div className="flex justify-end gap-2"><button type="button" className={`portal-button-secondary ${previewDevice === 'desktop' ? 'bg-slate-100' : ''}`} onClick={() => setPreviewDevice('desktop')}>Desktop</button><button type="button" className={`portal-button-secondary ${previewDevice === 'mobile' ? 'bg-slate-100' : ''}`} onClick={() => setPreviewDevice('mobile')}>Mobile</button><button type="button" className="portal-button-secondary" onClick={() => setPreviewDark((value) => !value)}>{previewDark ? 'Light' : 'Dark'} mode</button></div>
         <div className="border-b pb-4">
             <p>
                 <strong>From:</strong> school@bridge.edu
             </p>
 
             <p>
-                <strong>To:</strong> Parents
+                <strong>To:</strong> {previewTarget === 'compose' ? compose.recipient_group : 'Template recipient'}
             </p>
 
             <p>
-                <strong>Subject:</strong> {templateForm.subject}
+                <strong>Subject:</strong> {previewTarget === 'compose' ? compose.subject : templateForm.subject}
             </p>
+            <p className="text-sm text-[var(--text-muted)]">{previewTarget === 'compose' ? compose.preheader : templateForm.preheader}</p>
         </div>
-
-        <div
+        <div className={`mx-auto rounded-lg border border-[var(--border-default)] p-5 transition-all ${previewDark ? 'bg-slate-900 text-white' : 'bg-white'} ${previewDevice === 'mobile' ? 'max-w-[390px]' : 'max-w-full'}`}><div
             className="email-preview-content min-w-0 max-w-full"
             dangerouslySetInnerHTML={{
-                __html: templateForm.body,
+                __html: previewTarget === 'compose' ? compose.body : templateForm.body,
             }}
-        />
+        /></div>
 
     </div>
 </Modal>
@@ -1051,6 +1188,22 @@ export function EmailModuleView() {
         }
       >
         <p className="text-sm text-[var(--text-secondary)]">Delete the draft <strong className="text-[var(--text-primary)]">{draftPendingDeletion?.subject || 'Untitled draft'}</strong>? This cannot be undone.</p>
+      </Modal>
+      <Modal
+        isOpen={Boolean(editorDialog)}
+        onClose={closeEditorDialog}
+        title={{ table: 'Insert Email Table', button: 'Create Call-to-Action Button', variable: 'Insert Personalization', blocks: 'Insert Content Block', image: 'Image Accessibility', test: 'Send Test Email' }[editorDialog] || 'Email Editor'}
+        footer={<><button type="button" className="portal-button-secondary" onClick={closeEditorDialog}>Cancel</button><button type="button" className="portal-button-primary" onClick={applyEditorDialog}>{editorDialog === 'test' ? 'Send Test' : 'Insert'}</button></>}
+      >
+        {editorDialog === 'table' && <div className="grid grid-cols-2 gap-4"><div><label className="portal-label block">Rows</label><input type="number" min="1" max="12" className="portal-input mt-1" value={dialogForm.rows} onChange={(event) => setDialogForm({ ...dialogForm, rows: event.target.value })} /></div><div><label className="portal-label block">Columns</label><input type="number" min="1" max="8" className="portal-input mt-1" value={dialogForm.cols} onChange={(event) => setDialogForm({ ...dialogForm, cols: event.target.value })} /></div></div>}
+        {editorDialog === 'button' && <div className="space-y-4"><div><label className="portal-label block">Button text</label><input className="portal-input mt-1" value={dialogForm.text} onChange={(event) => setDialogForm({ ...dialogForm, text: event.target.value })} /></div><div><label className="portal-label block">Destination link</label><input type="url" className="portal-input mt-1" value={dialogForm.url} onChange={(event) => setDialogForm({ ...dialogForm, url: event.target.value })} /></div><div><label className="portal-label block">Button color</label><div className="mt-1 flex gap-3"><input type="color" className="h-11 w-14 rounded border" value={dialogForm.color} onChange={(event) => setDialogForm({ ...dialogForm, color: event.target.value })} /><input className="portal-input" value={dialogForm.color} onChange={(event) => setDialogForm({ ...dialogForm, color: event.target.value })} /></div></div></div>}
+        {editorDialog === 'variable' && <div><label className="portal-label block">Personalization field</label><select className="portal-input mt-1" value={dialogForm.variable} onChange={(event) => setDialogForm({ ...dialogForm, variable: event.target.value })}>{['student_name','parent_name','teacher_name','recipient_email','class_name','student_id','school_name','school_email','date'].map((variable) => <option key={variable} value={variable}>{variable.replaceAll('_', ' ')}</option>)}</select><p className="mt-2 text-xs text-[var(--text-muted)]">This value is replaced separately for each recipient when the email is sent.</p></div>}
+        {editorDialog === 'blocks' && <div><label className="portal-label block">Content block</label><div className="mt-3 grid grid-cols-2 gap-3">{[['header','School header'],['announcement','Announcement'],['event','Event details'],['two-column','Two columns'],['signature','Signature'],['footer','School footer']].map(([value, label]) => <button key={value} type="button" onClick={() => setDialogForm({ ...dialogForm, block: value })} className={`rounded-lg border p-4 text-left text-sm font-semibold ${dialogForm.block === value ? 'border-[var(--brand-navy)] bg-blue-50' : 'border-[var(--border-default)]'}`}>{label}</button>)}</div></div>}
+        {editorDialog === 'image' && <div><label className="portal-label block">Alternative text</label><input autoFocus className="portal-input mt-1" value={dialogForm.alt} onChange={(event) => setDialogForm({ ...dialogForm, alt: event.target.value })} placeholder="Describe what appears in the image" /><p className="mt-2 text-xs text-[var(--text-muted)]">Screen readers use this description, and it appears if the image cannot load.</p></div>}
+        {editorDialog === 'test' && <div><label className="portal-label block">Recipient email address</label><input autoFocus type="email" className="portal-input mt-1" value={dialogForm.toEmail} onChange={(event) => setDialogForm({ ...dialogForm, toEmail: event.target.value })} placeholder="you@example.com" /><p className="mt-2 text-xs text-[var(--text-muted)]">The subject will be prefixed with [TEST].</p></div>}
+      </Modal>
+      <Modal isOpen={Boolean(historyTemplate)} onClose={() => setHistoryTemplate(null)} title={`Version History — ${historyTemplate?.name || ''}`} size="large">
+        {(historyTemplate?.version_history || []).length ? <div className="space-y-3">{historyTemplate.version_history.map((version, index) => <div key={`${version.saved_at}-${index}`} className="rounded-lg border border-[var(--border-default)] p-4"><div className="flex justify-between gap-4"><strong>Version {index + 1}</strong><span className="text-xs text-[var(--text-muted)]">{new Date(version.saved_at).toLocaleString()}</span></div><p className="mt-2 text-sm"><strong>Subject:</strong> {version.subject}</p><div className="email-preview-content mt-3 max-h-40 overflow-auto rounded bg-[var(--bg-app)] p-3 text-sm" dangerouslySetInnerHTML={{ __html: version.body }} /></div>)}</div> : <p className="text-sm text-[var(--text-muted)]">No previous versions yet. A version is saved whenever this template is updated.</p>}
       </Modal>
     </div>
   )
@@ -1417,6 +1570,7 @@ export function PortalManagementView() {
   const [noticeForm, setNoticeForm] = useState({ title: '', body: '', recipients: 'all', status: 'draft', publish_date: '' })
   const [opportunityForm, setOpportunityForm] = useState({ title: '', eligibility: '', deadline: '', link: '' })
   const [userForm, setUserForm] = useState({ name: '', email: '', role: '', password: '', department: '' })
+  const [userPendingDeletion, setUserPendingDeletion] = useState(null)
   const [departmentName, setDepartmentName] = useState('')
   const [selectedDepartmentId, setSelectedDepartmentId] = useState('')
   const [memberUserId, setMemberUserId] = useState('')
@@ -1481,15 +1635,15 @@ export function PortalManagementView() {
     }
   }
 
-  const deleteUser = async (id) => {
-    if (!window.confirm('Remove this user?')) return
+  const deleteUser = async () => {
+    if (!userPendingDeletion) return
     try {
-      await usersApi.remove(id)
+      await usersApi.remove(userPendingDeletion.id)
       toast.success('User removed')
       refetchUsers()
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not remove user')
-    }
+    } finally { setUserPendingDeletion(null) }
   }
 
   const createDepartment = async (event) => {
@@ -1667,7 +1821,7 @@ export function PortalManagementView() {
                     { key: 'role', label: 'Role', render: (row) => <Badge status={row.role} /> },
                     { key: 'departments', label: 'Departments / Domains', render: (row) => row.departments?.join(', ') || '—' },
                     { key: 'is_active', label: 'Status', render: (row) => <Badge status={row.is_active ? 'connected' : 'failed'} /> },
-                    { key: 'actions', label: 'Actions', render: (row) => <button className="portal-button-danger" onClick={() => deleteUser(row.id)}>Remove</button> },
+                    { key: 'actions', label: 'Actions', render: (row) => <button className="portal-button-danger" onClick={() => setUserPendingDeletion(row)}>Remove</button> },
                   ]}
                   emptyMessage="No users found."
                 />
@@ -1714,6 +1868,7 @@ export function PortalManagementView() {
           },
         ]}
       />
+      <Modal isOpen={Boolean(userPendingDeletion)} onClose={() => setUserPendingDeletion(null)} title="Remove User" footer={<><button type="button" className="portal-button-secondary" onClick={() => setUserPendingDeletion(null)}>Cancel</button><button type="button" className="portal-button-primary bg-[var(--brand-red)] hover:bg-[var(--brand-red-dark)]" onClick={deleteUser}>Remove User</button></>}><p className="text-sm text-[var(--text-secondary)]">Remove <strong className="text-[var(--text-primary)]">{userPendingDeletion?.name}</strong> ({userPendingDeletion?.email})? Their access will be revoked.</p></Modal>
     </div>
   )
 }

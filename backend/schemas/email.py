@@ -10,6 +10,11 @@ class EmailTemplateCreate(ORMBaseModel):
     subject: str
     body: str
     attachments: list[dict[str, str]] = []
+    preheader: Optional[str] = None
+    category: Optional[str] = None
+    tags: list[str] = []
+    is_favorite: bool = False
+    publication_status: str = 'published'
 
 
 class EmailTemplateRead(ORMBaseModel):
@@ -30,6 +35,8 @@ class ScheduledEmailCreate(ORMBaseModel):
     attachments: list[dict[str, str]] = []
     template_id: Optional[int] = None
     scheduled_at: Optional[str] = None
+    draft_id: Optional[int] = None
+    preheader: Optional[str] = None
 
 
 class EmailSendRequest(ORMBaseModel):
@@ -39,6 +46,15 @@ class EmailSendRequest(ORMBaseModel):
     attachments: list[dict[str, str]] = []
     template_id: Optional[int] = None
     scheduled_at: Optional[str] = None
+    draft_id: Optional[int] = None
+    preheader: Optional[str] = None
+
+
+class TestEmailRequest(ORMBaseModel):
+    to_email: str
+    subject: str
+    body: str
+    preheader: Optional[str] = None
 
 
 class ScheduledEmailRead(ORMBaseModel):

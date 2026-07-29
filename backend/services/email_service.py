@@ -76,12 +76,31 @@ def _inline_quill_styles(html_body: str) -> str:
         return formatted
 
     html_body = re.sub(r'<(?:p|div|h[1-6]|li|blockquote)\b[^>]*>', format_tag, html_body, flags=re.IGNORECASE)
-    return re.sub(
+    html_body = re.sub(
         r'<img\b[^>]*>',
         lambda match: _add_style(match.group(0), 'max-width: 100%; height: auto;'),
         html_body,
         flags=re.IGNORECASE,
     )
+
+    def email_table(match: re.Match) -> str:
+        tag = _add_style(match.group(0), 'width: 100%; border-collapse: collapse; margin: 12px 0;')
+        if not re.search(r'\bwidth=', tag, flags=re.IGNORECASE):
+            tag = tag[:-1] + ' width="100%">'
+        if not re.search(r'\bcellpadding=', tag, flags=re.IGNORECASE):
+            tag = tag[:-1] + ' cellpadding="0">'
+        if not re.search(r'\bcellspacing=', tag, flags=re.IGNORECASE):
+            tag = tag[:-1] + ' cellspacing="0">'
+        return tag
+
+    html_body = re.sub(r'<table\b[^>]*>', email_table, html_body, flags=re.IGNORECASE)
+    html_body = re.sub(
+        r'<t[dh]\b[^>]*>',
+        lambda match: _add_style(match.group(0), 'border: 1px solid #d9dce6; padding: 10px; vertical-align: top; text-align: left;'),
+        html_body,
+        flags=re.IGNORECASE,
+    )
+    return html_body
 
 
 def _embed_uploaded_images(html_body: str) -> tuple[str, list[tuple[bytes, str, str, str]]]:

@@ -8,13 +8,14 @@ import uuid
 import os
 import re
 import logging
+import html
 from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import SessionLocal
 from ..dependencies import get_current_user, get_db, require_roles
 from ..models import EmailStatus, EmailTemplate, ScheduledEmail, User, UserRole
-from ..schemas import EmailSendRequest, EmailTemplateCreate, ScheduledEmailCreate
+from ..schemas import EmailSendRequest, EmailTemplateCreate, ScheduledEmailCreate, TestEmailRequest
 from ..services.email_service import send_email_record, send_plain_email
 from ..services.scheduler_service import ensure_scheduler_started
 from ..services.serialization import serialize_email_template, serialize_scheduled_email
@@ -90,6 +91,46 @@ def _attachment_files(attachments: list[dict] | None) -> list[tuple[str, str]]:
     return files
 
 
+def _render_variables(value: str, recipient_email: str = '', recipient: User | None = None) -> str:
+    recipient_name = getattr(recipient, 'name', '') or ''
+    replacements = {
+        '{{recipient_email}}': recipient_email,
+        '{{school_name}}': 'The Bridge School',
+        '{{school_email}}': os.getenv('GMAIL_SENDER', 'school@bridge.edu'),
+        '{{date}}': datetime.now(APP_TIMEZONE).strftime('%B %d, %Y'),
+        '{{student_name}}': recipient_name if getattr(recipient, 'role', None) == UserRole.student else '',
+        '{{parent_name}}': recipient_name if getattr(recipient, 'role', None) == UserRole.parent else '',
+        '{{teacher_name}}': recipient_name if getattr(recipient, 'role', None) == UserRole.teacher else '',
+        '{{class_name}}': getattr(recipient, 'department', '') or '',
+        '{{student_id}}': str(getattr(recipient, 'id', '') or '') if getattr(recipient, 'role', None) == UserRole.student else '',
+        '{{preferences_url}}': os.getenv('EMAIL_PREFERENCES_URL', '#'),
+    }
+    for token, replacement in replacements.items():
+        value = value.replace(token, replacement)
+    return value
+
+
+def _draft_for_delivery(db: Session, draft_id: int | None, current_user: User) -> ScheduledEmail | None:
+    if draft_id is None:
+        return None
+    email_record = db.get(ScheduledEmail, draft_id)
+    if not email_record or email_record.status != EmailStatus.draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Draft not found')
+    if current_user.role != UserRole.admin and email_record.created_by != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
+    return email_record
+
+
+def _apply_delivery_payload(email_record: ScheduledEmail, payload, scheduled_at: datetime | None) -> None:
+    email_record.recipient_group = payload.recipient_group
+    email_record.subject = payload.subject
+    email_record.body = payload.body
+    email_record.attachments = payload.attachments
+    email_record.template_id = payload.template_id
+    email_record.scheduled_at = scheduled_at
+    email_record.preheader = payload.preheader
+
+
 def _schedule_delivery(email_id: int, run_at: datetime):
     scheduler = ensure_scheduler_started()
 
@@ -103,11 +144,12 @@ def _schedule_delivery(email_id: int, run_at: datetime):
             sent = 0
             failed = 0
             for to_email in recipients:
+                recipient = db.query(User).filter(User.email == to_email).first()
                 success = send_plain_email(
                     to_email=to_email,
-                    subject=email_record.subject,
+                    subject=_render_variables(email_record.subject, to_email, recipient),
                     body="Please view this email in an HTML-compatible email client.",
-                    html_body=email_record.body,
+                    html_body=_with_preheader(_render_variables(email_record.body, to_email, recipient), _render_variables(email_record.preheader or '', to_email, recipient)),
                     attachments=_attachment_files(email_record.attachments),
                 )
                 if success:
@@ -158,6 +200,7 @@ def save_email_draft(payload: EmailSendRequest, db: Session = Depends(get_db), c
         template_id=payload.template_id,
         created_by=current_user.id,
         status=EmailStatus.draft,
+        preheader=payload.preheader,
     )
     db.add(email_record)
     db.commit()
@@ -177,6 +220,7 @@ def update_email_draft(email_id: int, payload: EmailSendRequest, db: Session = D
     email_record.body = payload.body
     email_record.attachments = payload.attachments
     email_record.template_id = payload.template_id
+    email_record.preheader = payload.preheader
     db.commit()
     db.refresh(email_record)
     return serialize_scheduled_email(email_record)
@@ -185,17 +229,16 @@ def update_email_draft(email_id: int, payload: EmailSendRequest, db: Session = D
 @router.post('/emails/send')
 def send_email(payload: EmailSendRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     scheduled_at = _validate_scheduled_at(payload.scheduled_at) if payload.scheduled_at else None
-    email_record = ScheduledEmail(
-        recipient_group=payload.recipient_group,
-        subject=payload.subject,
-        body=payload.body,
-        attachments=payload.attachments,
-        template_id=payload.template_id,
-        scheduled_at=scheduled_at,
-        created_by=current_user.id,
-        status=EmailStatus.draft,
-    )
-    db.add(email_record)
+    email_record = _draft_for_delivery(db, payload.draft_id, current_user)
+    if email_record:
+        _apply_delivery_payload(email_record, payload, scheduled_at)
+    else:
+        email_record = ScheduledEmail(
+            recipient_group=payload.recipient_group, subject=payload.subject, body=payload.body,
+            attachments=payload.attachments, template_id=payload.template_id,
+            scheduled_at=scheduled_at, preheader=payload.preheader, created_by=current_user.id, status=EmailStatus.draft,
+        )
+        db.add(email_record)
     db.flush()
     if payload.scheduled_at:
         email_record.status = EmailStatus.scheduled
@@ -205,11 +248,12 @@ def send_email(payload: EmailSendRequest, db: Session = Depends(get_db), current
     else:
         recipients = _resolve_recipients(db, payload.recipient_group)
         for to_email in recipients:
+            recipient = db.query(User).filter(User.email == to_email).first()
             send_plain_email(
                 to_email=to_email,
-                subject=payload.subject,
+                subject=_render_variables(payload.subject, to_email, recipient),
                 body="Please view this email in an HTML-compatible email client.",
-                html_body=payload.body,
+                html_body=_with_preheader(_render_variables(payload.body, to_email, recipient), _render_variables(payload.preheader or '', to_email, recipient)),
                 attachments=_attachment_files(payload.attachments),
             )
         email_record.status = EmailStatus.sent
@@ -222,17 +266,17 @@ def send_email(payload: EmailSendRequest, db: Session = Depends(get_db), current
 @router.post('/emails/schedule')
 def schedule_email(payload: ScheduledEmailCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     scheduled_at = _validate_scheduled_at(payload.scheduled_at)
-    email_record = ScheduledEmail(
-        recipient_group=payload.recipient_group,
-        subject=payload.subject,
-        body=payload.body,
-        attachments=payload.attachments,
-        template_id=payload.template_id,
-        scheduled_at=scheduled_at,
-        created_by=current_user.id,
-        status=EmailStatus.scheduled,
-    )
-    db.add(email_record)
+    email_record = _draft_for_delivery(db, payload.draft_id, current_user)
+    if email_record:
+        _apply_delivery_payload(email_record, payload, scheduled_at)
+        email_record.status = EmailStatus.scheduled
+    else:
+        email_record = ScheduledEmail(
+            recipient_group=payload.recipient_group, subject=payload.subject, body=payload.body,
+            attachments=payload.attachments, template_id=payload.template_id,
+            scheduled_at=scheduled_at, preheader=payload.preheader, created_by=current_user.id, status=EmailStatus.scheduled,
+        )
+        db.add(email_record)
     db.commit()
     db.refresh(email_record)
     _schedule_delivery(email_record.id, email_record.scheduled_at)
@@ -261,7 +305,7 @@ def list_templates(db: Session = Depends(get_db), current_user: User = Depends(g
 
 @router.post('/email-templates')
 def create_template(payload: EmailTemplateCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    template = EmailTemplate(name=payload.name, subject=payload.subject, body=payload.body, attachments=payload.attachments, created_by=current_user.id)
+    template = EmailTemplate(**payload.model_dump(), created_by=current_user.id)
     db.add(template)
     db.commit()
     db.refresh(template)
@@ -276,6 +320,8 @@ def delete_template(template_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Template not found')
     if current_user.role != UserRole.admin and template.created_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
+    if template.publication_status == 'locked' and current_user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Official locked templates can only be deleted by an administrator')
     db.delete(template)
     db.commit()
     return {'detail': 'Template deleted'}
@@ -355,13 +401,54 @@ def update_template(
         and template.created_by != current_user.id
     ):
         raise HTTPException(403, "Insufficient permissions")
+    if template.publication_status == 'locked' and current_user.role != UserRole.admin:
+        raise HTTPException(403, "Official locked templates can only be edited by an administrator")
+
+    history = list(template.version_history or [])
+    history.append({'saved_at': datetime.now(timezone.utc).isoformat(), 'name': template.name,
+                    'subject': template.subject, 'preheader': template.preheader or '', 'body': template.body})
+    template.version_history = history[-20:]
 
     template.name = payload.name
     template.subject = payload.subject
     template.body = payload.body
     template.attachments = payload.attachments
+    template.preheader = payload.preheader
+    template.category = payload.category
+    template.tags = payload.tags
+    template.is_favorite = payload.is_favorite
+    template.publication_status = payload.publication_status
 
     db.commit()
     db.refresh(template)
 
     return serialize_email_template(template)
+
+
+@router.post('/emails/test')
+def send_test_email(payload: TestEmailRequest, current_user: User = Depends(get_current_user)):
+    html_body = _with_preheader(payload.body, payload.preheader)
+    if not send_plain_email(payload.to_email, f'[TEST] {payload.subject}', 'Test email preview.', html_body):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail='Test email could not be sent')
+    return {'detail': 'Test email sent'}
+
+
+def _with_preheader(body: str, preheader: str | None) -> str:
+    if not preheader:
+        return body
+    hidden = f'<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{html.escape(preheader)}</div>'
+    return hidden + body
+
+
+@router.post('/email-templates/{template_id}/duplicate')
+def duplicate_template(template_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    source = db.get(EmailTemplate, template_id)
+    if not source:
+        raise HTTPException(status_code=404, detail='Template not found')
+    clone = EmailTemplate(name=f'{source.name} (Copy)', subject=source.subject, body=source.body,
+        attachments=source.attachments, preheader=source.preheader, category=source.category, tags=source.tags,
+        publication_status='draft', created_by=current_user.id)
+    db.add(clone)
+    db.commit()
+    db.refresh(clone)
+    return serialize_email_template(clone)

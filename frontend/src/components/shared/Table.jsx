@@ -2,7 +2,7 @@ import EmptyState from './EmptyState.jsx'
 import SkeletonRow from './SkeletonRow.jsx'
 
 export default function Table({ columns, data, loading, emptyMessage, emptyIcon, emptyAction, rowKey = 'id' }) {
-  const tableShell = 'overflow-hidden rounded-xl border border-[var(--border-default)] bg-white'
+  const tableShell = 'overflow-x-auto rounded-xl border border-[var(--border-default)] bg-white'
   const headingClass = 'border-b border-[var(--border-default)] px-4 py-3 font-display text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]'
   const cellClass = 'border-b border-[#f0f2f8] px-4 py-3 text-sm text-[var(--text-primary)]'
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from ..database import Base
@@ -16,7 +16,14 @@ class EmailTemplate(Base):
     subject = Column(String(255), nullable=False)
     body = Column(Text, nullable=False)
     attachments = Column(JSON, nullable=True, default=list)
+    preheader = Column(String(255), nullable=True)
+    category = Column(String(80), nullable=True)
+    tags = Column(JSON, nullable=True, default=list)
+    is_favorite = Column(Boolean, nullable=False, default=False)
+    publication_status = Column(String(20), nullable=False, default='published')
+    version_history = Column(JSON, nullable=True, default=list)
     created_by = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     created_by_user = relationship('User', back_populates='email_templates_created', foreign_keys=[created_by])

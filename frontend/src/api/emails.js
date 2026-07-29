@@ -13,4 +13,6 @@ export const emailsApi = {
   updateTemplate: (id, data) => api.put(`/api/email-templates/${id}`, data),
   uploadImage: (formData) => api.post('/api/upload-image', formData),
   uploadDocument: (formData) => api.post('/api/upload-email-document', formData),
+  sendTest: (payload) => api.post('/api/emails/test', payload),
+  duplicateTemplate: (id) => api.post(`/api/email-templates/${id}/duplicate`),
 }

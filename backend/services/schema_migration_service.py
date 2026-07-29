@@ -19,9 +19,17 @@ def apply_additive_schema_updates(engine) -> None:
         },
         'email_templates': {
             'attachments': 'JSON NULL',
+            'preheader': 'VARCHAR(255) NULL',
+            'category': 'VARCHAR(80) NULL',
+            'tags': 'JSON NULL',
+            'is_favorite': 'BOOLEAN NOT NULL DEFAULT FALSE',
+            'publication_status': "VARCHAR(20) NOT NULL DEFAULT 'published'",
+            'version_history': 'JSON NULL',
+            'updated_at': 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
         },
         'scheduled_emails': {
             'attachments': 'JSON NULL',
+            'preheader': 'VARCHAR(255) NULL',
         },
     }
     with engine.begin() as connection:
