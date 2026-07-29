@@ -23,7 +23,7 @@ class Settings:
     secret_key: str = os.getenv('SECRET_KEY', 'bridge-school-secret')
     algorithm: str = os.getenv('ALGORITHM', 'HS256')
     access_token_expire_minutes: int = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '60'))
-    demo_password: str = os.getenv('DEMO_PASSWORD', '')
+    demo_password: str = os.getenv('DEMO_PASSWORD', 'password123')
     gmail_client_id: str = os.getenv('GMAIL_CLIENT_ID', '')
     gmail_client_secret: str = os.getenv('GMAIL_CLIENT_SECRET', '')
     gmail_sender: str = os.getenv('GMAIL_SENDER', '')

@@ -10,8 +10,8 @@ class ActionItemCreate(ORMBaseModel):
     description: str
     assigned_to: int
     due_date: Optional[str] = None
-    whatsapp_reminder_frequency: Optional[str] = None
-    whatsapp_reminder_at: Optional[str] = None
+    email_reminder_frequency: Optional[str] = None
+    email_reminder_at: Optional[str] = None
 
 
 class ActionItemUpdate(ORMBaseModel):
@@ -19,8 +19,8 @@ class ActionItemUpdate(ORMBaseModel):
     description: Optional[str] = None
     assigned_to: Optional[int] = None
     due_date: Optional[str] = None
-    whatsapp_reminder_frequency: Optional[str] = None
-    whatsapp_reminder_at: Optional[str] = None
+    email_reminder_frequency: Optional[str] = None
+    email_reminder_at: Optional[str] = None
 
 
 class ActionItemRead(ORMBaseModel):

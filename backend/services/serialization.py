@@ -23,13 +23,29 @@ def serialize_user(user):
         'whatsapp_number': user.whatsapp_number,
         'department': user.department,
         'departments': [department.name for department in getattr(user, 'departments', [])],
+        'guardians': [
+            {'id': guardian.id, 'name': guardian.name, 'email': guardian.email}
+            for guardian in getattr(user, 'guardians', [])
+        ],
+        'children': [
+            {'id': child.id, 'name': child.name, 'email': child.email}
+            for child in getattr(user, 'children', [])
+        ],
+        'teachers': [
+            {'id': teacher.id, 'name': teacher.name, 'email': teacher.email}
+            for teacher in getattr(user, 'teachers', [])
+        ],
+        'students_taught': [
+            {'id': student.id, 'name': student.name, 'email': student.email}
+            for student in getattr(user, 'students_taught', [])
+        ],
         'is_active': user.is_active,
         'created_at': iso(user.created_at),
     }
 
 
 def serialize_action_item(action_item):
-    reminder = getattr(action_item, 'whatsapp_reminder', None)
+    reminder = getattr(action_item, 'email_reminder', None)
     return {
         'id': action_item.id,
         'meeting_id': action_item.meeting_id,
@@ -39,7 +55,7 @@ def serialize_action_item(action_item):
         'status': action_item.status.value if hasattr(action_item.status, 'value') else action_item.status,
         'due_date': iso(action_item.due_date),
         'created_at': iso(action_item.created_at),
-        'whatsapp_reminder': {
+        'email_reminder': {
             'frequency': reminder.frequency,
             'run_at': iso(reminder.run_at),
             'is_active': reminder.is_active,

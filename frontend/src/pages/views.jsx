@@ -30,30 +30,24 @@ Quill.register(DividerBlot)
 Quill.register(EmailButtonBlot)
 import axios from "axios";
 import { jsPDF } from 'jspdf'
-import { format, formatDistanceToNow, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import {
   BookOpen,
   CalendarDays,
   ChartColumnBig,
   CirclePlus,
   Download,
-  FileText,
-  Megaphone,
   Send,
-  Shield,
   Sparkles,
-  Users,
-  Wifi,
-  WifiOff,
-  WandSparkles,
-  BriefcaseBusiness,
   Trash2,
 } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { toast } from 'react-hot-toast'
+import { useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../context/AuthContext.jsx'
 import { useApi } from '../hooks/useApi.js'
+import { formatApiError, isValidPortalPassword } from '../utils/apiErrors.js'
 import { dashboardApi } from '../api/dashboard.js'
 import { meetingsApi } from '../api/meetings.js'
 import { actionItemsApi } from '../api/actionItems.js'
@@ -77,6 +71,13 @@ import Tabs from '../components/shared/Tabs.jsx'
 import Table from '../components/shared/Table.jsx'
 import CreateMeetingModal from '../components/shared/CreateMeetingModal.jsx'
 const formatDate = (value, pattern = 'PPP') => (value ? format(parseISO(value), pattern) : '—')
+const parentChildPrefix = (user) => user?.role === 'parent' && user.children?.[0]?.name ? `${user.children[0].name}'s ` : ''
+const todayInputValue = () => new Date().toISOString().slice(0, 10)
+const futureDateTimeInputValue = () => {
+  const now = new Date()
+  now.setMinutes(now.getMinutes() + 1, 0, 0)
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+}
 
 function AttachmentList({ attachments, onRemove }) {
   return (
@@ -96,16 +97,13 @@ function AttachmentList({ attachments, onRemove }) {
   )
 }
 
-function useMeetingData() {
-  return useApi(() => meetingsApi.list(), [])
-}
-
 export function LoginPageView({ onLogin }) {
   return onLogin
 }
 
 export function AdminDashboardView() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const { data, loading, refetch } = useApi(() => dashboardApi.summary(), [])
   const [createOpen, setCreateOpen] = useState(false)
 
@@ -119,7 +117,7 @@ export function AdminDashboardView() {
       </div>
       <div className="mt-6 flex gap-3">
         <button type="button" className="portal-button-primary" onClick={() => setCreateOpen(true)}>New Meeting</button>
-        <a href="/admin/email" className="portal-button-secondary">Schedule Email</a>
+        <button type="button" className="portal-button-secondary" onClick={() => navigate('/admin/email')}>Schedule Email</button>
       </div>
       <CreateMeetingModal isOpen={createOpen} onClose={() => setCreateOpen(false)} onCreated={refetch} />
     </div>
@@ -127,9 +125,8 @@ export function AdminDashboardView() {
 }
 
 export function MeetingWorkspaceView({ canCreateMeeting }) {
-  const { user } = useAuth()
   const { data: meetings = [], loading: meetingsLoading, error: meetingsError, refetch: refetchMeetings } = useApi(() => meetingsApi.list(), [])
-  const { data: actionItems = [], loading: actionItemsLoading, error: actionItemsError, refetch: refetchActions } = useApi(() => actionItemsApi.list(), [])
+  const { data: actionItems = [], error: actionItemsError, refetch: refetchActions } = useApi(() => actionItemsApi.list(), [])
   const { data: users = [], error: usersError } = useApi(() => usersApi.list(), [])
   const [meetingModalOpen, setMeetingModalOpen] = useState(false)
   const [selectedPastMeeting, setSelectedPastMeeting] = useState(null)
@@ -139,7 +136,10 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   const [keyDecisions, setKeyDecisions] = useState([])
   const [generatedActionItems, setGeneratedActionItems] = useState([])
   const [assigneeFilter, setAssigneeFilter] = useState('all')
-  const [actionForm, setActionForm] = useState({ meeting_id: '', description: '', assigned_to: '', due_date: '', whatsapp_reminder_frequency: 'none', whatsapp_reminder_at: '' })
+  const [workspaceTab, setWorkspaceTab] = useState('meetings')
+  const [actionForm, setActionForm] = useState({ meeting_id: '', description: '', assigned_to: '', due_date: '', email_reminder_frequency: 'none', email_reminder_at: '' })
+  const [assigneeSearch, setAssigneeSearch] = useState('')
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
 
   const visibleMeetings = meetings.filter((meeting) => meeting.status)
   const pastMeetings = useMemo(() => meetings.filter((meeting) => meeting.status === 'past'), [meetings])
@@ -147,6 +147,11 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     if (assigneeFilter === 'all') return actionItems
     return actionItems.filter((item) => String(item.assigned_to) === String(assigneeFilter))
   }, [actionItems, assigneeFilter])
+  const assignableUsers = useMemo(() => users.filter((person) => person.is_active && ['admin', 'teacher', 'staff'].includes(person.role)), [users])
+  const assigneeMatches = useMemo(() => {
+    const query = assigneeSearch.trim().toLowerCase()
+    return (query ? assignableUsers.filter((person) => `${person.name} ${person.email} ${person.role}`.toLowerCase().includes(query)) : assignableUsers).slice(0, 8)
+  }, [assignableUsers, assigneeSearch])
 
   useEffect(() => {
     if (meetingsError) console.error('Failed to load meetings for the workspace', meetingsError)
@@ -307,7 +312,9 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     event.preventDefault()
     try {
       await actionItemsApi.create(actionForm)
-      setActionForm({ meeting_id: '', description: '', assigned_to: '', due_date: '', whatsapp_reminder_frequency: 'none', whatsapp_reminder_at: '' })
+      setActionForm({ meeting_id: '', description: '', assigned_to: '', due_date: '', email_reminder_frequency: 'none', email_reminder_at: '' })
+      setAssigneeSearch('')
+      setAssigneePickerOpen(false)
       refetchActions()
       toast.success('Action item created')
     } catch (error) {
@@ -320,6 +327,8 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     <div>
       <PageHeader title="Meeting Workspace" subtitle="Coordinate discussions and track decisions." action={canCreateMeeting ? { label: 'New Meeting', icon: CirclePlus, onClick: () => setMeetingModalOpen(true) } : null} />
       <Tabs
+        activeTab={workspaceTab}
+        onTabChange={setWorkspaceTab}
         tabs={[
           {
             id: 'meetings',
@@ -404,7 +413,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                     <label className="portal-label block">Filter by assignee</label>
                     <select className="portal-input mt-1" value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}>
                       <option value="all">All assignees</option>
-                      {users.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                      {assignableUsers.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -415,29 +424,31 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                     {meetings.map((meeting) => <option key={meeting.id} value={meeting.id}>{meeting.title}</option>)}
                   </select>
                   <input className="portal-input" placeholder="Action item description" value={actionForm.description} onChange={(event) => setActionForm({ ...actionForm, description: event.target.value })} />
-                  <select className="portal-input" value={actionForm.assigned_to} onChange={(event) => setActionForm({ ...actionForm, assigned_to: event.target.value })}>
-                    <option value="">Assign to</option>
-                    {users.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-                  </select>
-                  <select className="portal-input" value={actionForm.whatsapp_reminder_frequency} onChange={(event) => setActionForm({ ...actionForm, whatsapp_reminder_frequency: event.target.value })}>
-                    <option value="none">No WhatsApp reminder</option>
-                    <option value="hourly">WhatsApp: hourly</option>
-                    <option value="daily">WhatsApp: daily</option>
-                    <option value="weekly">WhatsApp: weekly</option>
-                    <option value="custom">WhatsApp: once at custom time</option>
-                  </select>
-                  <div className="flex gap-3">
-                    <input type="date" className="portal-input" value={actionForm.due_date} onChange={(event) => setActionForm({ ...actionForm, due_date: event.target.value })} />
-                    <button type="submit" className="portal-button-primary whitespace-nowrap">Add Action Item</button>
+                  <div className="relative">
+                    <input className="portal-input" placeholder="Search staff or teacher to assign" value={assigneeSearch} onFocus={() => setAssigneePickerOpen(true)} onBlur={() => setAssigneePickerOpen(false)} onChange={(event) => { setAssigneeSearch(event.target.value); setActionForm({ ...actionForm, assigned_to: '' }) }} />
+                    {assigneePickerOpen ? <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[var(--border-default)] bg-white shadow-lg">{assigneeMatches.length ? assigneeMatches.map((person) => <button key={person.id} type="button" className="block w-full px-3 py-2 text-left text-sm hover:bg-[var(--bg-app)]" onMouseDown={(event) => { event.preventDefault(); setActionForm({ ...actionForm, assigned_to: String(person.id) }); setAssigneeSearch(`${person.name} — ${person.role}`); setAssigneePickerOpen(false) }}><span className="font-medium text-[var(--text-primary)]">{person.name}</span><span className="ml-2 text-xs text-[var(--text-muted)]">{person.role} · {person.email}</span></button>) : <div className="px-3 py-2 text-sm text-[var(--text-muted)]">No eligible people found.</div>}</div> : null}
                   </div>
-                  {actionForm.whatsapp_reminder_frequency !== 'none' ? (
+                  <select className="portal-input" value={actionForm.email_reminder_frequency} onChange={(event) => setActionForm({ ...actionForm, email_reminder_frequency: event.target.value })}>
+                    <option value="none">No email reminder</option>
+                    <option value="hourly">Email: hourly</option>
+                    <option value="daily">Email: daily</option>
+                    <option value="weekly">Email: weekly</option>
+                    <option value="custom">Email: once at custom time</option>
+                  </select>
+                  <div className="flex flex-col gap-2">
+                    <label className="portal-label block">Action due date</label>
+                    <input type="date" min={todayInputValue()} className="portal-input" value={actionForm.due_date} onChange={(event) => setActionForm({ ...actionForm, due_date: event.target.value })} />
+                  </div>
+                  <button type="submit" className="portal-button-primary whitespace-nowrap">Add Action Item</button>
+                  {actionForm.email_reminder_frequency !== 'none' ? (
                     <div className="lg:col-span-2">
-                      <label className="portal-label block">First reminder date and time (UTC)</label>
-                      <input type="datetime-local" required className="portal-input mt-1" value={actionForm.whatsapp_reminder_at} onChange={(event) => setActionForm({ ...actionForm, whatsapp_reminder_at: event.target.value })} />
+                      <label className="portal-label block">When should the first reminder be sent?</label>
+                      <input type="datetime-local" min={futureDateTimeInputValue()} required className="portal-input mt-1" value={actionForm.email_reminder_at} onChange={(event) => setActionForm({ ...actionForm, email_reminder_at: event.target.value })} />
+                      <p className="mt-2 text-xs text-[var(--text-muted)]">This is separate from the action due date. The reminder time controls when the first email is sent, while the due date controls the task deadline.</p>
                     </div>
                   ) : null}
-                  {actionForm.whatsapp_reminder_frequency !== 'none' ? (
-                    <p className="lg:col-span-2 text-xs text-[var(--text-muted)]">The assignee must have a WhatsApp number saved in their profile. Reminders stop when the action item is marked done.</p>
+                  {actionForm.email_reminder_frequency !== 'none' ? (
+                    <p className="lg:col-span-2 text-xs text-[var(--text-muted)]">Reminders are sent to the assignee&apos;s registered email address and stop once the action item is marked done.</p>
                   ) : null}
                 </form>
               </div>
@@ -1573,6 +1584,10 @@ export function PortalManagementView() {
   const [noticeForm, setNoticeForm] = useState({ title: '', body: '', recipients: 'all', status: 'draft', publish_date: '' })
   const [opportunityForm, setOpportunityForm] = useState({ title: '', eligibility: '', deadline: '', link: '' })
   const [userForm, setUserForm] = useState({ name: '', email: '', role: '', password: '', department: '' })
+  const [guardians, setGuardians] = useState([{ name: '', email: '' }])
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [importFile, setImportFile] = useState(null)
+  const [parentToLink, setParentToLink] = useState('')
   const [userPendingDeletion, setUserPendingDeletion] = useState(null)
   const [departmentName, setDepartmentName] = useState('')
   const [selectedDepartmentId, setSelectedDepartmentId] = useState('')
@@ -1627,22 +1642,107 @@ export function PortalManagementView() {
       toast.error('Please enter a valid email address')
       return
     }
+    if (!isValidPortalPassword(userForm.password)) {
+      toast.error('Temporary password must be 12+ characters with uppercase, lowercase, a number, and a symbol')
+      return
+    }
     try {
+      if (userForm.role === 'student') {
+        if (guardians.some((guardian) => !guardian.name.trim() || !guardian.email.trim())) {
+          toast.error('Add the name and email for at least one parent or guardian')
+          return
+        }
+        await usersApi.createStudent({ name: userForm.name, email: userForm.email, password: userForm.password, guardians })
+        toast.success('Student and guardian account(s) created. Credential emails are being sent.')
+        setUserForm({ name: '', email: '', role: '', password: '', department: '' })
+        setGuardians([{ name: '', email: '' }])
+        refetchUsers()
+        return
+      }
       const response = await usersApi.create({ ...userForm, head_teacher: false, is_active: true })
-      toast.success(response.data.invitation_sent ? 'User created and credentials emailed' : 'User created, but the credential email could not be sent')
+      toast.success(response.data.invitation_queued ? 'User created. Credential email is being sent.' : 'User created')
       setUserForm({ name: '', email: '', role: '', password: '', department: '' })
       refetchUsers()
       refetchDepartments()
     } catch (error) {
-      toast.error(error?.response?.data?.detail || 'Could not create user')
+      toast.error(formatApiError(error, 'Could not create user'))
     }
   }
 
-  const deleteUser = async () => {
-    if (!userPendingDeletion) return
+  const saveProfile = async (event) => {
+    event.preventDefault()
+    try {
+      await usersApi.update(selectedUser.id, { name: selectedUser.name, email: selectedUser.email, role: selectedUser.role, is_active: selectedUser.is_active })
+      toast.success('User profile updated')
+      refetchUsers()
+    } catch (error) {
+      toast.error(formatApiError(error, 'Could not update profile'))
+    }
+  }
+
+  const importUsers = async (event) => {
+    event.preventDefault()
+    if (!importFile) return toast.error('Choose an Excel file first')
+    try {
+      const response = await usersApi.import(importFile)
+      toast.success(`${response.data.accounts_created} account(s) created. Credential emails are being sent.`)
+      setImportFile(null)
+      refetchUsers()
+      refetchDepartments()
+    } catch (error) {
+      toast.error(formatApiError(error, 'Could not import users'))
+    }
+  }
+
+  useEffect(() => {
+    usersApi.cleanupInvalidFamilyRecords().then((response) => {
+      if (response.data.count) {
+        toast.success(`Removed ${response.data.count} invalid unlinked family account(s)`)
+        refetchUsers()
+      }
+    }).catch(() => {})
+  }, [])
+
+  const linkGuardian = async () => {
+    if (!parentToLink) return toast.error('Select a parent or guardian account')
+    try {
+      await usersApi.linkGuardian(selectedUser.id, parentToLink)
+      toast.success('Parent/guardian linked')
+      setParentToLink('')
+      const updated = (await usersApi.list()).data
+      setSelectedUser(updated.find((person) => person.id === selectedUser.id) || null)
+      refetchUsers()
+    } catch (error) { toast.error(error?.response?.data?.detail || 'Could not link guardian') }
+  }
+
+  const unlinkGuardian = async (parentId) => {
+    try {
+      await usersApi.unlinkGuardian(selectedUser.id, parentId)
+      const updated = (await usersApi.list()).data
+      setSelectedUser(updated.find((person) => person.id === selectedUser.id) || null)
+      refetchUsers()
+    } catch (error) { toast.error(error?.response?.data?.detail || 'Could not remove guardian') }
+  }
+
+  const deleteUser = async (id) => {
+    const targetId = id || userPendingDeletion?.id
+    if (!targetId) return
+    if (!window.confirm('Remove this user?')) return
+    try {
+      await usersApi.remove(targetId)
+      toast.success('User removed')
+      if (!id) setUserPendingDeletion(null)
+      if (selectedUser?.id === targetId) setSelectedUser(null)
+      refetchUsers()
+      refetchDepartments()
+    } catch (error) {
+      toast.error(formatApiError(error, 'Could not remove user'))
+    }
+  }
     try {
       await usersApi.remove(userPendingDeletion.id)
       toast.success('User removed')
+      setSelectedUser(null)
       refetchUsers()
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not remove user')
@@ -1778,7 +1878,7 @@ export function PortalManagementView() {
                   </div>
                   <div>
                     <label className="portal-label block">Deadline</label>
-                    <input type="date" className="portal-input mt-1" value={opportunityForm.deadline} onChange={(event) => setOpportunityForm({ ...opportunityForm, deadline: event.target.value })} />
+                    <input type="date" min={todayInputValue()} className="portal-input mt-1" value={opportunityForm.deadline} onChange={(event) => setOpportunityForm({ ...opportunityForm, deadline: event.target.value })} />
                   </div>
                   <div>
                     <label className="portal-label block">Link</label>
@@ -1797,8 +1897,8 @@ export function PortalManagementView() {
                 <div className="space-y-3">
                   {departments.map((department) => (
                     <div key={department.id} className="portal-panel">
-                      <div className="flex items-center justify-between"><div className="font-medium text-[var(--text-primary)]">{department.name}</div><span className="text-xs text-[var(--text-muted)]">{department.members.length} member{department.members.length === 1 ? '' : 's'}</span></div>
-                      <div className="mt-3 flex flex-wrap gap-2">{department.members.length ? department.members.map((member) => <span key={member.id} className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-xs text-[var(--text-secondary)]">{member.name}<button type="button" className="text-[var(--brand-red)]" onClick={() => removeDepartmentMember(department.id, member.id)} aria-label={`Remove ${member.name}`}>×</button></span>) : <span className="text-sm text-[var(--text-muted)]">No members yet.</span>}</div>
+                      <div className="flex items-center justify-between"><div className="font-medium text-[var(--text-primary)]">{department.name}</div><span className="text-xs text-[var(--text-muted)]">{department.members?.length || 0} member{(department.members?.length || 0) === 1 ? '' : 's'}</span></div>
+                      <div className="mt-3 flex flex-wrap gap-2">{department.members?.length ? department.members.map((member) => <span key={member.id} className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-app)] px-2.5 py-1 text-xs text-[var(--text-secondary)]">{member.name}<button type="button" className="text-[var(--brand-red)]" onClick={() => removeDepartmentMember(department.id, member.id)} aria-label={`Remove ${member.name}`}>×</button></span>) : <span className="text-sm text-[var(--text-muted)]">No members yet.</span>}</div>
                     </div>
                   ))}
                   {!departments.length ? <EmptyState title="No departments or domains" message="Create one to organise staff, committees, or other groups." /> : null}
@@ -1823,9 +1923,11 @@ export function PortalManagementView() {
                     { key: 'email', label: 'Email' },
                     { key: 'role', label: 'Role', render: (row) => <Badge status={row.role} /> },
                     { key: 'departments', label: 'Departments / Domains', render: (row) => row.departments?.join(', ') || '—' },
+                    { key: 'connections', label: 'Connections', render: (row) => row.role === 'student' ? `${row.guardians?.length || 0} guardian(s)` : row.role === 'parent' ? `${row.children?.length || 0} student${row.children?.length === 1 ? '' : 's'}` : '—' },
                     { key: 'is_active', label: 'Status', render: (row) => <Badge status={row.is_active ? 'connected' : 'failed'} /> },
                     { key: 'actions', label: 'Actions', render: (row) => <button className="portal-button-danger" onClick={() => setUserPendingDeletion(row)}>Remove</button> },
                   ]}
+                  onRowClick={(row) => setSelectedUser({ ...row })}
                   emptyMessage="No users found."
                 />
                 <form className="space-y-4 portal-panel" onSubmit={submitUser}>
@@ -1848,6 +1950,11 @@ export function PortalManagementView() {
                       <option value="parent">Parent</option>
                     </select>
                   </div>
+                  {userForm.role === 'student' ? <div className="space-y-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-app)] p-3">
+                    <div><div className="font-medium text-[var(--text-primary)]">Parent or guardian</div><p className="mt-1 text-xs text-[var(--text-muted)]">At least one is required. New guardian accounts are created automatically and emailed their secure password.</p></div>
+                    {guardians.map((guardian, index) => <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><input required className="portal-input" placeholder="Guardian name" value={guardian.name} onChange={(event) => setGuardians((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><input required type="email" className="portal-input" placeholder="guardian@email.com" value={guardian.email} onChange={(event) => setGuardians((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} />{guardians.length > 1 ? <button type="button" className="portal-button-danger" onClick={() => setGuardians((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Remove</button> : <span />}</div>)}
+                    {guardians.length < 2 ? <button type="button" className="portal-button-secondary" onClick={() => setGuardians((items) => [...items, { name: '', email: '' }])}>Add another guardian</button> : <p className="text-xs text-[var(--text-muted)]">Maximum of two guardians per student.</p>}
+                  </div> : null}
                   {userForm.role === 'staff' ? <div>
                     <label className="portal-label block">Department</label>
                     <select required className="portal-input mt-1" value={userForm.department} onChange={(event) => setUserForm({ ...userForm, department: event.target.value })}>
@@ -1864,14 +1971,30 @@ export function PortalManagementView() {
                     </div>
                     <p className="mt-1 text-xs text-[var(--text-muted)]">Use Generate for a secure 16-character password. It will be emailed to the user.</p>
                   </div>
-                  <button type="submit" className="portal-button-primary">Add User</button>
+                  <button type="submit" className="portal-button-primary">{userForm.role === 'student' ? 'Register Student & Guardian' : 'Add User'}</button>
+                </form>
+                <form className="space-y-3 portal-panel" onSubmit={importUsers}>
+                  <div className="font-medium text-[var(--text-primary)]">Import users from Excel</div>
+                  <p className="text-xs text-[var(--text-muted)]">Required: <code>name, email, role, password</code>. Staff also need <code>department</code>. Students need <code>guardian_1_name, guardian_1_email</code>; optional second guardian: <code>guardian_2_name, guardian_2_email</code>.</p>
+                  <div className="flex flex-wrap gap-2 text-sm"><a className="portal-button-ghost" href={`${import.meta.env.VITE_API_BASE_URL || ''}/api/users/templates/standard-users.xlsx`}>Download standard-user template</a><a className="portal-button-ghost" href={`${import.meta.env.VITE_API_BASE_URL || ''}/api/users/templates/students.xlsx`}>Download student/guardian template</a></div>
+                  <input type="file" accept=".xlsx,.xls" className="portal-input" onChange={(event) => setImportFile(event.target.files?.[0] || null)} />
+                  <button className="portal-button-secondary">Validate & Import</button>
                 </form>
               </div>
             ),
           },
+          {
+            id: 'user-profile',
+            hidden: true,
+            label: 'User Profile',
+            content: selectedUser ? <div className="mx-auto max-w-3xl space-y-6"><div className="portal-panel"><div className="mb-5"><div className="text-xl font-semibold text-[var(--text-primary)]">{selectedUser.name}</div><div className="text-sm text-[var(--text-muted)]">Full user record and account controls</div></div><form className="space-y-4" onSubmit={saveProfile}><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Name</label><input required className="portal-input mt-1" value={selectedUser.name} onChange={(event) => setSelectedUser({ ...selectedUser, name: event.target.value })} /></div><div><label className="portal-label block">Email</label><input required type="email" className="portal-input mt-1" value={selectedUser.email} onChange={(event) => setSelectedUser({ ...selectedUser, email: event.target.value })} /></div></div><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Role</label><select className="portal-input mt-1" value={selectedUser.role} onChange={(event) => setSelectedUser({ ...selectedUser, role: event.target.value })}><option value="admin">Admin</option><option value="teacher">Teacher</option><option value="staff">Staff</option><option value="student">Student</option><option value="parent">Parent / Guardian</option></select></div><label className="mt-7 flex items-center gap-2 text-sm text-[var(--text-primary)]"><input type="checkbox" checked={selectedUser.is_active} onChange={(event) => setSelectedUser({ ...selectedUser, is_active: event.target.checked })} /> Account active</label></div><div className="flex flex-wrap gap-3"><button className="portal-button-primary">Save profile</button><button type="button" className="portal-button-danger" onClick={() => deleteUser(selectedUser.id)}>Remove user</button></div></form></div>{selectedUser.role === 'student' ? <div className="portal-panel"><div className="font-medium text-[var(--text-primary)]">Parents / guardians</div><p className="mt-1 text-xs text-[var(--text-muted)]">One or two guardians are required for every student.</p><div className="mt-3 space-y-2">{selectedUser.guardians?.map((guardian) => <div key={guardian.id} className="flex items-center justify-between gap-3 rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]"><span>{guardian.name} <span className="text-[var(--text-muted)]">— {guardian.email}</span></span><button type="button" className="portal-button-danger" onClick={() => unlinkGuardian(guardian.id)}>Unlink</button></div>)}</div>{(selectedUser.guardians?.length || 0) < 2 ? <div className="mt-3 flex gap-2"><select className="portal-input" value={parentToLink} onChange={(event) => setParentToLink(event.target.value)}><option value="">Link existing parent / guardian</option>{users.filter((person) => person.role === 'parent' && !selectedUser.guardians?.some((guardian) => guardian.id === person.id)).map((parent) => <option key={parent.id} value={parent.id}>{parent.name} — {parent.email}</option>)}</select><button type="button" className="portal-button-secondary" onClick={linkGuardian}>Link</button></div> : null}</div> : null}{selectedUser.role === 'parent' ? <div className="portal-panel"><div className="font-medium text-[var(--text-primary)]">Linked students</div><div className="mt-3 space-y-2">{selectedUser.children?.map((student) => <div key={student.id} className="rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]">{student.name} <span className="text-[var(--text-muted)]">— {student.email}</span></div>)}</div></div> : null}</div> : <EmptyState title="Select a user" message="Choose a person in User Management to open their complete profile." />,
+          },
         ]}
       />
-      <Modal isOpen={Boolean(userPendingDeletion)} onClose={() => setUserPendingDeletion(null)} title="Remove User" footer={<><button type="button" className="portal-button-secondary" onClick={() => setUserPendingDeletion(null)}>Cancel</button><button type="button" className="portal-button-primary bg-[var(--brand-red)] hover:bg-[var(--brand-red-dark)]" onClick={deleteUser}>Remove User</button></>}><p className="text-sm text-[var(--text-secondary)]">Remove <strong className="text-[var(--text-primary)]">{userPendingDeletion?.name}</strong> ({userPendingDeletion?.email})? Their access will be revoked.</p></Modal>
+      <Modal isOpen={Boolean(selectedUser)} onClose={() => setSelectedUser(null)} title={selectedUser ? `${selectedUser.name} — User Profile` : 'User Profile'} size="large">
+        {selectedUser ? <div className="space-y-5"><form className="space-y-4" onSubmit={saveProfile}><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Name</label><input required className="portal-input mt-1" value={selectedUser.name} onChange={(event) => setSelectedUser({ ...selectedUser, name: event.target.value })} /></div><div><label className="portal-label block">Email</label><input required type="email" className="portal-input mt-1" value={selectedUser.email} onChange={(event) => setSelectedUser({ ...selectedUser, email: event.target.value })} /></div></div><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Role</label><select className="portal-input mt-1" value={selectedUser.role} onChange={(event) => setSelectedUser({ ...selectedUser, role: event.target.value })}><option value="admin">Admin</option><option value="teacher">Teacher</option><option value="staff">Staff</option><option value="student">Student</option><option value="parent">Parent / Guardian</option></select></div><label className="mt-7 flex items-center gap-2 text-sm text-[var(--text-primary)]"><input type="checkbox" checked={selectedUser.is_active} onChange={(event) => setSelectedUser({ ...selectedUser, is_active: event.target.checked })} /> Account active</label></div><div className="flex flex-wrap gap-3"><button className="portal-button-primary">Save profile</button><button type="button" className="portal-button-danger" onClick={() => deleteUser(selectedUser.id)}>Remove user</button></div></form>{selectedUser.role === 'student' ? <div className="border-t border-[var(--border-default)] pt-4"><div className="font-medium text-[var(--text-primary)]">Parents / guardians</div><p className="mt-1 text-xs text-[var(--text-muted)]">One or two guardians are required.</p><div className="mt-3 space-y-2">{selectedUser.guardians?.map((guardian) => <div key={guardian.id} className="flex items-center justify-between gap-3 rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]"><span>{guardian.name} <span className="text-[var(--text-muted)]">— {guardian.email}</span></span><button type="button" className="portal-button-danger" onClick={() => unlinkGuardian(guardian.id)}>Unlink</button></div>)}</div>{(selectedUser.guardians?.length || 0) < 2 ? <div className="mt-3 flex gap-2"><select className="portal-input" value={parentToLink} onChange={(event) => setParentToLink(event.target.value)}><option value="">Link existing parent / guardian</option>{users.filter((person) => person.role === 'parent' && !selectedUser.guardians?.some((guardian) => guardian.id === person.id)).map((parent) => <option key={parent.id} value={parent.id}>{parent.name} — {parent.email}</option>)}</select><button type="button" className="portal-button-secondary" onClick={linkGuardian}>Link</button></div> : null}</div> : null}{selectedUser.role === 'parent' ? <div className="border-t border-[var(--border-default)] pt-4"><div className="font-medium text-[var(--text-primary)]">Linked students</div><div className="mt-3 space-y-2">{selectedUser.children?.map((student) => <div key={student.id} className="rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]">{student.name} <span className="text-[var(--text-muted)]">— {student.email}</span></div>)}</div></div> : null}</div> : null}
+      </Modal>
+      <Modal isOpen={Boolean(userPendingDeletion)} onClose={() => setUserPendingDeletion(null)} title="Remove User" footer={<><button type="button" className="portal-button-secondary" onClick={() => setUserPendingDeletion(null)}>Cancel</button><button type="button" className="portal-button-primary bg-[var(--brand-red)] hover:bg-[var(--brand-red-dark)]" onClick={() => deleteUser()}>Remove User</button></>}><p className="text-sm text-[var(--text-secondary)]">Remove <strong className="text-[var(--text-primary)]">{userPendingDeletion?.name}</strong> ({userPendingDeletion?.email})? Their access will be revoked.</p></Modal>
     </div>
   )
 }
@@ -1932,7 +2055,7 @@ export function StudentHomeView({ titlePrefix = '' }) {
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix}${user?.name ? `${user.name}'s ` : 'Welcome back, '}Home`} subtitle={format(new Date(), 'EEEE, d MMMM yyyy')} />
+      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}${user?.role === 'parent' ? '' : user?.name ? `${user.name}'s ` : 'Welcome back, '}Home`} subtitle={format(new Date(), 'EEEE, d MMMM yyyy')} />
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="portal-panel">
           <div className="mb-3 text-sm font-medium text-[var(--text-primary)]">{resultsHeading}</div>
@@ -2009,6 +2132,7 @@ export function StudentHomeView({ titlePrefix = '' }) {
 }
 
 export function StudentProgressView({ titlePrefix = '' }) {
+  const { user } = useAuth()
   const { data: results = [] } = useApi(() => resultsApi.list(), [])
   const chartData = useMemo(() => results.map((result) => ({ subject: result.subject, mine: result.grade, average: result.class_average })), [results])
 
@@ -2018,7 +2142,7 @@ export function StudentProgressView({ titlePrefix = '' }) {
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix}Progress Dashboard`} subtitle="Track your academic performance over time." />
+      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Progress Dashboard`} subtitle="Track your academic performance over time." />
       <div className="portal-panel">
         <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -2047,8 +2171,9 @@ export function StudentProgressView({ titlePrefix = '' }) {
 }
 
 export function StudentResultHistoryView({ titlePrefix = '' }) {
+  const { user } = useAuth()
   const { data: results = [] } = useApi(() => resultsApi.list(), [])
-  const heading = titlePrefix ? "Your Child's Results" : 'My Results'
+  const heading = user?.role === 'parent' ? `${parentChildPrefix(user) || 'Child '}Results` : titlePrefix ? "Your Child's Results" : 'My Results'
 
   return (
     <div>
@@ -2098,12 +2223,13 @@ export function StudentResultHistoryView({ titlePrefix = '' }) {
 }
 
 export function NoticeBoardView({ titlePrefix = '' }) {
+  const { user } = useAuth()
   const { data: notices = [] } = useApi(() => noticesApi.list(), [])
   const [openNotice, setOpenNotice] = useState(null)
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix}Notice Board`} subtitle="Read recent notices and announcements." />
+      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Notice Board`} subtitle="Read recent notices and announcements." />
       <div className="grid gap-4 md:grid-cols-2">
         {notices.map((notice) => (
           <button key={notice.id} type="button" className="portal-panel text-left transition hover:bg-[var(--bg-app)]" onClick={() => setOpenNotice(notice)}>
@@ -2128,11 +2254,12 @@ export function NoticeBoardView({ titlePrefix = '' }) {
 }
 
 export function OpportunityBoardView({ titlePrefix = '' }) {
+  const { user } = useAuth()
   const { data: opportunities = [] } = useApi(() => opportunitiesApi.list(), [])
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix}Opportunities`} subtitle="Discover scholarships and enrichment opportunities." />
+      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Opportunities`} subtitle="Discover scholarships and enrichment opportunities." />
       <div className="grid gap-4 md:grid-cols-2">
         {opportunities.map((opportunity) => {
           const soon = opportunity.deadline ? new Date(opportunity.deadline) - new Date() < 7 * 24 * 60 * 60 * 1000 : false
@@ -2210,7 +2337,7 @@ export function SettingsView({ titlePrefix = '' }) {
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix}Settings`} subtitle="Manage contact details and notification preferences." />
+      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Settings`} subtitle="Manage contact details and notification preferences." />
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="portal-panel">
           <div className="text-sm font-medium text-[var(--text-primary)]">Update WhatsApp Number</div>

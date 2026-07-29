@@ -1,7 +1,8 @@
 import AppRouter from './routes/AppRouter.jsx'
+import AppErrorBoundary from './components/shared/AppErrorBoundary.jsx'
 
 function App() {
-  return <AppRouter />
+  return <AppErrorBoundary><AppRouter /></AppErrorBoundary>
 }
 
 export default App

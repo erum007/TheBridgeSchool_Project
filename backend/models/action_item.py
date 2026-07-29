@@ -22,4 +22,4 @@ class ActionItem(Base):
 
     meeting = relationship('Meeting', back_populates='action_items')
     assigned_to_user = relationship('User', back_populates='assigned_action_items', foreign_keys=[assigned_to])
-    whatsapp_reminder = relationship('ActionItemWhatsAppReminder', back_populates='action_item', uselist=False, cascade='all, delete-orphan')
+    email_reminder = relationship('ActionItemEmailReminder', back_populates='action_item', uselist=False, cascade='all, delete-orphan')

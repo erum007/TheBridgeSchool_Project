@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 export default function Tabs({ tabs, defaultTab, activeTab: controlledActiveTab, onTabChange }) {
-  const initialTab = defaultTab || tabs[0]?.id
+  const visibleTabs = useMemo(() => tabs.filter((tab) => !tab.hidden), [tabs])
+  const initialTab = defaultTab || visibleTabs[0]?.id
   const [uncontrolledActiveTab, setUncontrolledActiveTab] = useState(initialTab)
   const activeTab = controlledActiveTab ?? uncontrolledActiveTab
   const selectTab = (tabId) => {
@@ -14,9 +15,10 @@ export default function Tabs({ tabs, defaultTab, activeTab: controlledActiveTab,
   useEffect(() => {
     const button = buttonRefs.current[activeTab]
     if (button) {
-      setIndicator({ left: button.offsetLeft, width: button.offsetWidth })
+      const nextIndicator = { left: button.offsetLeft, width: button.offsetWidth }
+      setIndicator((current) => current.left === nextIndicator.left && current.width === nextIndicator.width ? current : nextIndicator)
     }
-  }, [activeTab, tabs])
+  }, [activeTab, visibleTabs])
 
   const activeContent = useMemo(() => tabs.find((tab) => tab.id === activeTab)?.content, [activeTab, tabs])
 
@@ -24,7 +26,7 @@ export default function Tabs({ tabs, defaultTab, activeTab: controlledActiveTab,
     <div>
       <div className="relative mb-6 border-b border-[var(--border-default)]">
         <div className="flex gap-1">
-          {tabs.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               ref={(element) => {

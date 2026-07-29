@@ -4,14 +4,16 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import './index.css'
 import App from './App.jsx'
+import AppErrorBoundary from './components/shared/AppErrorBoundary.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
-        <Toaster
+        <AppErrorBoundary>
+          <App />
+          <Toaster
           position="top-right"
           toastOptions={{
             duration: 3000,
@@ -32,6 +34,7 @@ createRoot(document.getElementById('root')).render(
             },
           }}
         />
+        </AppErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

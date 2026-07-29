@@ -11,10 +11,16 @@ const emptyForm = {
   end_time: '',
   meeting_mode: 'in_person', meeting_link: '', location: '',
 }
+const localDateTimeMinimum = () => {
+  const now = new Date()
+  now.setMinutes(now.getMinutes() + 1, 0, 0)
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+}
 
 export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
   const { data: users = [] } = useApi(() => usersApi.list(), [isOpen])
   const [form, setForm] = useState(emptyForm)
+  const minimumDateTime = useMemo(() => localDateTimeMinimum(), [isOpen])
   const customDepartments = useMemo(() => [...new Set(users.flatMap((user) => user.departments || []))].sort(), [users])
 
   useEffect(() => {
@@ -35,6 +41,10 @@ export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
     }
     if (new Date(form.end_time) <= new Date(form.scheduled_at)) {
       toast.error('End time must be after the start time')
+      return
+    }
+    if (new Date(form.scheduled_at) <= new Date() || new Date(form.end_time) <= new Date()) {
+      toast.error('Meeting start and end times must be in the future')
       return
     }
     if (['online', 'choice'].includes(form.meeting_mode) && !form.meeting_link.trim()) {
@@ -82,11 +92,11 @@ export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
         </div>
         <div>
           <label className="portal-label block">Start date & time <span className="text-[var(--brand-red)]">*</span></label>
-          <input required type="datetime-local" className="portal-input mt-1" value={form.scheduled_at} onChange={(event) => setForm({ ...form, scheduled_at: event.target.value })} />
+          <input required type="datetime-local" min={minimumDateTime} className="portal-input mt-1" value={form.scheduled_at} onChange={(event) => setForm({ ...form, scheduled_at: event.target.value })} />
         </div>
         <div>
           <label className="portal-label block">End date & time <span className="text-[var(--brand-red)]">*</span></label>
-          <input required type="datetime-local" min={form.scheduled_at || undefined} className="portal-input mt-1" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} />
+          <input required type="datetime-local" min={form.scheduled_at > minimumDateTime ? form.scheduled_at : minimumDateTime} className="portal-input mt-1" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} />
         </div>
         <div>
           <label className="portal-label block">Department / audience</label>

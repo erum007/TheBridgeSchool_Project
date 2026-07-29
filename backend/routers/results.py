@@ -8,10 +8,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
 
-from ..config import settings
 from ..dependencies import get_current_user, get_db
 from ..models import Result, User, UserRole
-from ..services.auth_service import get_password_hash
 from ..services.results_service import parse_results_upload, send_performance_report_emails
 from ..services.serialization import serialize_result
 
@@ -39,16 +37,10 @@ async def upload_results(
         if not student and row.get('student_name'):
             student = db.query(User).filter(User.name == row['student_name'], User.role == UserRole.student).first()
         if not student:
-            generated_email = row.get('student_email') or f"{str(row.get('student_name') or 'student').lower().replace(' ', '.')}@bridge.local"
-            demo_password = settings.demo_password or settings.secret_key
-            student = User(
-                name=str(row.get('student_name') or 'Student'),
-                email=generated_email,
-                hashed_password=get_password_hash(demo_password),
-                role=UserRole.student,
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Student '{row.get('student_email') or row.get('student_name') or 'unknown'}' was not found. Register the student with a parent or guardian before uploading results.",
             )
-            db.add(student)
-            db.flush()
         result = Result(
             student_id=student.id,
             subject=row['subject'] or subject,

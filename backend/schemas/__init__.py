@@ -6,5 +6,5 @@ from .meeting import MeetingCreate, MeetingRead, MeetingTranscriptRequest, Meeti
 from .notice import NoticeCreate, NoticeRead, NoticeUpdate
 from .opportunity import OpportunityCreate, OpportunityRead
 from .result import ResultRead
-from .user import UserAdminUpdate, UserCreate, UserRead, UserUpdateSettings
+from .user import GuardianRegistration, ParentLinkCreate, StudentRegistration, TeacherLinkCreate, UserAdminUpdate, UserCreate, UserRead, UserUpdateSettings
 from .whatsapp import WhatsAppLogRead, WhatsAppSendRequest

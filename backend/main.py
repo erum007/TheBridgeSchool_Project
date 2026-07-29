@@ -14,7 +14,7 @@ from .database import Base, SessionLocal, engine
 from .models import (
     ActionItem,
     ActionItemStatus,
-    ActionItemWhatsAppReminder,
+    ActionItemEmailReminder,
     Department,
     EmailStatus,
     EmailTemplate,
@@ -49,7 +49,7 @@ from .routers import (
 )
 from .services.auth_service import get_password_hash
 from .services.scheduler_service import ensure_scheduler_started
-from .services.action_item_whatsapp_reminder_service import restore_reminders
+from .services.action_item_email_reminder_service import restore_reminders
 from .services.schema_migration_service import apply_additive_schema_updates
 
 
@@ -91,11 +91,18 @@ app.include_router(ai_router)
 
 
 def _seed_demo_data(db: Session) -> None:
+    demo_password = settings.demo_password or 'password123'
+
     def ensure_user(name: str, email: str, role: UserRole, head_teacher: bool = False):
         existing = db.query(User).filter(User.email == email).first()
         if existing:
+            existing.hashed_password = get_password_hash(demo_password)
+            if existing.role != role:
+                existing.role = role
+            if existing.head_teacher != head_teacher:
+                existing.head_teacher = head_teacher
+            db.flush()
             return existing
-        demo_password = settings.demo_password or settings.secret_key
         user = User(
             name=name,
             email=email,
@@ -214,6 +221,14 @@ def _backfill_department_memberships(db: Session) -> None:
     db.commit()
 
 
+def _ensure_standard_departments(db: Session) -> None:
+    """Make the default meeting audiences visible and manageable as real departments."""
+    for name in ('Academic', 'Operations', 'Admissions', 'Student Affairs', 'Finance'):
+        if not db.query(Department.id).filter(Department.name == name).first():
+            db.add(Department(name=name))
+    db.commit()
+
+
 @app.on_event('startup')
 def on_startup() -> None:
     logger.info(
@@ -229,6 +244,7 @@ def on_startup() -> None:
     db = SessionLocal()
     try:
         _seed_demo_data(db)
+        _ensure_standard_departments(db)
         _backfill_department_memberships(db)
     finally:
         db.close()

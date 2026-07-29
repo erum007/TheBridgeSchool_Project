@@ -69,6 +69,14 @@ parent_student_links = Table(
 )
 
 
+teacher_student_links = Table(
+    'teacher_student_links',
+    Base.metadata,
+    Column('teacher_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+    Column('student_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
 user_departments = Table(
     'user_departments',
     Base.metadata,
