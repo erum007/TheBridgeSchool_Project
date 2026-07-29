@@ -1725,28 +1725,23 @@ export function PortalManagementView() {
   }
 
   const deleteUser = async (id) => {
-    const targetId = id || userPendingDeletion?.id
+    if (id) {
+      setUserPendingDeletion(users.find((person) => person.id === id) || selectedUser)
+      return
+    }
+    const targetId = userPendingDeletion?.id
     if (!targetId) return
-    if (!window.confirm('Remove this user?')) return
     try {
       await usersApi.remove(targetId)
       toast.success('User removed')
-      if (!id) setUserPendingDeletion(null)
       if (selectedUser?.id === targetId) setSelectedUser(null)
       refetchUsers()
       refetchDepartments()
     } catch (error) {
       toast.error(formatApiError(error, 'Could not remove user'))
+    } finally {
+      setUserPendingDeletion(null)
     }
-  }
-    try {
-      await usersApi.remove(userPendingDeletion.id)
-      toast.success('User removed')
-      setSelectedUser(null)
-      refetchUsers()
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || 'Could not remove user')
-    } finally { setUserPendingDeletion(null) }
   }
 
   const createDepartment = async (event) => {
