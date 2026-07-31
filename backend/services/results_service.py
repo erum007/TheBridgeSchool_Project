@@ -6,9 +6,29 @@ from io import BytesIO
 import uuid
 
 import pandas as pd
+from fastapi import HTTPException, status
 
 from ..models import Result, User, UserRole
 from .email_service import send_plain_email
+
+
+def _is_missing(value) -> bool:
+    """True when a cell value is absent (None / NaN)."""
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _parse_float(value) -> float:
+    """Parse a cell value as float, raising ValueError if not possible."""
+    if _is_missing(value):
+        raise ValueError('missing value')
+    if isinstance(value, str) and not value.strip():
+        raise ValueError('empty value')
+    return float(value)
 
 
 def parse_results_upload(file_bytes: bytes, filename: str) -> list[dict]:
@@ -19,20 +39,100 @@ def parse_results_upload(file_bytes: bytes, filename: str) -> list[dict]:
 
     normalized = {column.lower().strip().replace(' ', '_'): column for column in frame.columns}
     rows = []
+    errors = []
     batch_id = uuid.uuid4().hex[:12]
-    for _, row in frame.iterrows():
-        rows.append(
-            {
-                'student_name': row.get(normalized.get('student_name', 'student_name'), row.get('name')),
-                'student_email': row.get(normalized.get('student_email', 'student_email'), row.get('email')),
-                'subject': row.get(normalized.get('subject', 'subject')),
-                'grade': float(row.get(normalized.get('grade', 'grade'))),
-                'class_average': float(row.get(normalized.get('class_average', 'class_average'), row.get('average'))),
-                'attendance': float(row.get(normalized.get('attendance', 'attendance'), row.get('attendance_%', 0))),
-                'term': row.get(normalized.get('term', 'term')),
-                'batch_id': batch_id,
-            }
+
+    for index, row in enumerate(frame.iterrows(), start=2):  # row 1 is the header
+        _, row_data = row
+        row_errors = []
+        try:
+            # student_email: required, must not be empty
+            student_email = row_data.get(normalized.get('student_email', 'student_email'), row_data.get('email'))
+            if _is_missing(student_email) or (isinstance(student_email, str) and not student_email.strip()):
+                row_errors.append("'student_email' is missing or empty")
+
+            # grade: required, must parse as float
+            try:
+                grade = _parse_float(row_data.get(normalized.get('grade', 'grade')))
+            except (TypeError, ValueError):
+                grade = None
+                row_errors.append("'grade' is missing or not a number")
+
+            # class_average: required, must parse as float
+            try:
+                class_average = _parse_float(
+                    row_data.get(normalized.get('class_average', 'class_average'), row_data.get('average'))
+                )
+            except (TypeError, ValueError):
+                class_average = None
+                row_errors.append("'class_average' is missing or not a number")
+
+            # attendance: default to 0.0 only if the column exists but the cell is
+            # empty; if the column is missing entirely, record an error.
+            attendance_column = normalized.get('attendance')
+            if attendance_column is None and 'attendance_%' not in row_data.index:
+                attendance = None
+                row_errors.append("'attendance' is missing or not a number")
+            else:
+                try:
+                    raw_attendance = row_data.get(attendance_column, row_data.get('attendance_%'))
+                    attendance = 0.0 if _is_missing(raw_attendance) else _parse_float(raw_attendance)
+                except (TypeError, ValueError):
+                    attendance = None
+                    row_errors.append("'attendance' is missing or not a number")
+
+            # term: required, must not be empty
+            term = row_data.get(normalized.get('term', 'term'))
+            if _is_missing(term) or (isinstance(term, str) and not term.strip()):
+                row_errors.append("'term' is missing or empty")
+
+            if row_errors:
+                errors.append(f"Row {index}: {'. '.join(row_errors)}.")
+                continue
+
+            rows.append(
+                {
+                    'student_email': student_email,
+                    'subject': row_data.get(normalized.get('subject', 'subject')),
+                    'grade': grade,
+                    'class_average': class_average,
+                    'attendance': attendance,
+                    'term': term,
+                    'batch_id': batch_id,
+                }
+            )
+        except Exception as exc:  # defensive: never let one row abort the whole parse
+            errors.append(f'Row {index}: could not be processed ({exc}).')
+
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=' '.join(errors),
         )
+
+    # Validate that all rows belong to a single subject
+    unique_subjects = {str(row.get('subject')).strip() for row in rows}
+    if len(unique_subjects) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                'A single CSV must contain only one subject. '
+                f'Found multiple subjects: {sorted(unique_subjects)}. '
+                'Please upload one CSV per subject.'
+            ),
+        )
+
+    # Validate that all rows belong to a single term
+    unique_terms = {str(row.get('term')).strip() for row in rows}
+    if len(unique_terms) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                'A single CSV must contain only one term. '
+                f'Found multiple terms: {sorted(unique_terms)}.'
+            ),
+        )
+
     return rows
 
 

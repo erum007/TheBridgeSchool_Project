@@ -20,8 +20,6 @@ router = APIRouter(prefix='/api/results', tags=['results'])
 @router.post('/upload')
 async def upload_results(
     file: UploadFile = File(...),
-    subject: str = Form(...),
-    class_name: str = Form(...),
     notify: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -29,21 +27,29 @@ async def upload_results(
     if current_user.role not in {UserRole.admin, UserRole.teacher}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
     payload_rows = parse_results_upload(await file.read(), file.filename or 'results.csv')
-    created = []
-    for row in payload_rows:
-        student = None
-        if row.get('student_email'):
-            student = db.query(User).filter(User.email == row['student_email']).first()
-        if not student and row.get('student_name'):
-            student = db.query(User).filter(User.name == row['student_name'], User.role == UserRole.student).first()
+
+    # Validate ALL rows before saving anything
+    validated_students = []
+    for index, row in enumerate(payload_rows, start=1):
+        email = row.get('student_email')
+        if not email or (isinstance(email, float) and pd.isna(email)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Row {index}: missing student_email. All rows must include a student_email column.",
+            )
+        student = db.query(User).filter(User.email == email, User.role == UserRole.student).first()
         if not student:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Student '{row.get('student_email') or row.get('student_name') or 'unknown'}' was not found. Register the student with a parent or guardian before uploading results.",
+                detail=f"Row {index}: no registered student found with email '{email}'. All students must be registered before uploading results.",
             )
+        validated_students.append(student)
+
+    created = []
+    for row, student in zip(payload_rows, validated_students):
         result = Result(
             student_id=student.id,
-            subject=row['subject'] or subject,
+            subject=row['subject'],
             grade=row['grade'],
             class_average=row['class_average'],
             attendance=row['attendance'],

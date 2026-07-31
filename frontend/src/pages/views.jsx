@@ -1226,7 +1226,7 @@ export function EmailModuleView() {
 export function PerformanceBroadcasterView() {
   const { user } = useAuth()
   const { data: results = [], refetch } = useApi(() => resultsApi.list(), [])
-  const [form, setForm] = useState({ subject: '', class_name: '', notify: true, file: null })
+  const [form, setForm] = useState({ notify: true, file: null })
   const [pendingDeleteBatchId, setPendingDeleteBatchId] = useState(null)
   const [previewRows, setPreviewRows] = useState([])
   const [fileZoneVersion, setFileZoneVersion] = useState(0)
@@ -1342,8 +1342,6 @@ export function PerformanceBroadcasterView() {
     }
     const payload = new FormData()
     payload.append('file', form.file)
-    payload.append('subject', form.subject)
-    payload.append('class_name', form.class_name)
     payload.append('notify', form.notify ? 'true' : 'false')
     try {
       const result = await resultsApi.upload(payload)
@@ -1351,7 +1349,7 @@ export function PerformanceBroadcasterView() {
         ? ` — ${result.data.emails_sent} email${result.data.emails_sent !== 1 ? 's' : ''} sent`
         : ''
       toast.success(`Results uploaded${emailMsg}`)
-      setForm({ subject: '', class_name: '', notify: true, file: null })
+      setForm({ notify: true, file: null })
       setPreviewRows([])
       setFileZoneVersion((value) => value + 1)
       refetch()
@@ -1365,14 +1363,6 @@ export function PerformanceBroadcasterView() {
       <PageHeader title="Performance Broadcaster" subtitle="Upload result sheets and notify parents." />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
         <form className="space-y-4 portal-panel" onSubmit={submit}>
-          <div>
-            <label className="portal-label block">Subject</label>
-            <input className="portal-input mt-1" value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} />
-          </div>
-          <div>
-            <label className="portal-label block">Class</label>
-            <input className="portal-input mt-1" value={form.class_name} onChange={(event) => setForm({ ...form, class_name: event.target.value })} />
-          </div>
           <FileUploadZone key={fileZoneVersion} accept=".csv,.xlsx" label="Upload result sheet" onFileSelect={handleFileSelect} />
           {form.file ? (
             <div className="flex items-center justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-app)] px-3 py-2 text-xs text-[var(--text-secondary)]">
