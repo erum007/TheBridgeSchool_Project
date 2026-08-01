@@ -31,3 +31,11 @@ class PasswordOtpRequest(ORMBaseModel):
 class ChangePasswordRequest(ORMBaseModel):
     otp: str
     new_password: str
+
+
+class ChangeEmailRequest(ORMBaseModel):
+    new_email: str
+
+
+class EmailOtpRequest(ORMBaseModel):
+    otp: str

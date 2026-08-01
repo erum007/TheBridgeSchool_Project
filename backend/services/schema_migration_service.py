@@ -9,6 +9,13 @@ def apply_additive_schema_updates(engine) -> None:
     additions = {
         'users': {
             'department': 'VARCHAR(120) NULL',
+            'profile_picture_url': 'VARCHAR(4000) NULL',
+            'email_notifications_enabled': 'BOOLEAN NOT NULL DEFAULT TRUE',
+            'whatsapp_notifications_enabled': 'BOOLEAN NOT NULL DEFAULT TRUE',
+            'pending_email': 'VARCHAR(255) NULL',
+            'email_change_current_token': 'VARCHAR(64) NULL',
+            'email_change_new_token': 'VARCHAR(64) NULL',
+            'email_change_expires_at': 'DATETIME NULL',
         },
         'meetings': {
             'end_time': 'DATETIME NULL',

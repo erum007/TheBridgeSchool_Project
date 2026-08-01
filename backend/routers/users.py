@@ -427,7 +427,22 @@ def delete_user(user_id: int, db: Session = Depends(get_db), current_user: User 
 
 @router.patch('/me/settings')
 def update_my_settings(payload: UserUpdateSettings, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    current_user.whatsapp_number = payload.whatsapp_number
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Name cannot be empty')
+        current_user.name = name
+    if payload.whatsapp_number is not None:
+        current_user.whatsapp_number = payload.whatsapp_number or None
+    if payload.profile_picture_url is not None:
+        picture_url = payload.profile_picture_url or None
+        if picture_url is not None and len(picture_url) > 4000:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Profile picture is too large to save')
+        current_user.profile_picture_url = picture_url
+    if payload.email_notifications_enabled is not None:
+        current_user.email_notifications_enabled = payload.email_notifications_enabled
+    if payload.whatsapp_notifications_enabled is not None:
+        current_user.whatsapp_notifications_enabled = payload.whatsapp_notifications_enabled
     db.commit()
     db.refresh(current_user)
     return serialize_user(current_user)

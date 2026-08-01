@@ -43,7 +43,6 @@ const staffNav = [
 const studentNav = [
   { label: 'Student', items: [
     { to: '/student/home', label: 'Home', icon: Shield },
-    { to: '/student/progress', label: 'Progress Dashboard', icon: Sparkles },
     { to: '/student/results', label: 'Result History', icon: ClipboardList },
     { to: '/student/notices', label: 'Notice Board', icon: FileText },
     { to: '/student/opportunities', label: 'Opportunities', icon: WalletCards },
@@ -54,7 +53,6 @@ const studentNav = [
 const parentNav = [
   { label: 'Parent', items: [
     { to: '/parent/home', label: 'Home', icon: Shield },
-    { to: '/parent/progress', label: 'Progress Dashboard', icon: Sparkles },
     { to: '/parent/results', label: 'Result History', icon: ClipboardList },
     { to: '/parent/notices', label: 'Notice Board', icon: FileText },
     { to: '/parent/opportunities', label: 'Opportunities', icon: WalletCards },

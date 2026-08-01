@@ -19,7 +19,11 @@ class UserCreate(ORMBaseModel):
 
 
 class UserUpdateSettings(ORMBaseModel):
+    name: Optional[str] = None
     whatsapp_number: Optional[str] = None
+    profile_picture_url: Optional[str] = None
+    email_notifications_enabled: Optional[bool] = None
+    whatsapp_notifications_enabled: Optional[bool] = None
 
 
 class UserAdminUpdate(ORMBaseModel):

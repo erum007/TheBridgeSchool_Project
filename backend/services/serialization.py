@@ -22,6 +22,9 @@ def serialize_user(user):
         'head_teacher': user.head_teacher,
         'whatsapp_number': user.whatsapp_number,
         'department': user.department,
+        'profile_picture_url': getattr(user, 'profile_picture_url', None),
+        'email_notifications_enabled': getattr(user, 'email_notifications_enabled', True),
+        'whatsapp_notifications_enabled': getattr(user, 'whatsapp_notifications_enabled', True),
         'departments': [department.name for department in getattr(user, 'departments', [])],
         'guardians': [
             {'id': guardian.id, 'name': guardian.name, 'email': guardian.email}

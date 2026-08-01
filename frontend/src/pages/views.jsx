@@ -2349,31 +2349,109 @@ export function OpportunityBoardView({ titlePrefix = '' }) {
 }
 
 export function SettingsView({ titlePrefix = '' }) {
-  const { user } = useAuth()
+  const { user, setUser, refreshUser } = useAuth()
+  const [profileName, setProfileName] = useState(user?.name || '')
   const [whatsappNumber, setWhatsappNumber] = useState(user?.whatsapp_number || '')
   const [emailRequest, setEmailRequest] = useState('')
-  const [emailEnabled, setEmailEnabled] = useState(true)
-  const [whatsappEnabled, setWhatsappEnabled] = useState(true)
+  const [currentEmailOtp, setCurrentEmailOtp] = useState('')
+  const [newEmailOtp, setNewEmailOtp] = useState('')
+  const [emailChangeStep, setEmailChangeStep] = useState('request')
+  const [profilePicture, setProfilePicture] = useState('')
+  const [emailEnabled, setEmailEnabled] = useState(user?.email_notifications_enabled ?? true)
+  const [whatsappEnabled, setWhatsappEnabled] = useState(user?.whatsapp_notifications_enabled ?? true)
   const [passwordForm, setPasswordForm] = useState({ otp: '', new_password: '', confirm_password: '' })
   const [passwordCodeSent, setPasswordCodeSent] = useState(false)
 
+  const saveProfile = async () => {
+    try {
+      const updatedUser = (await usersApi.updateSettings({
+        name: profileName.trim(),
+        profile_picture_url: profilePicture || undefined,
+        email_notifications_enabled: emailEnabled,
+        whatsapp_notifications_enabled: whatsappEnabled,
+      })).data
+      setUser(updatedUser)
+      window.localStorage.setItem('bridge_school_user', JSON.stringify(updatedUser))
+      toast.success('Profile details updated')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not update profile')
+    }
+  }
+
   const saveWhatsapp = async () => {
     try {
-      await usersApi.updateSettings({ whatsapp_number: whatsappNumber })
+      const updatedUser = (await usersApi.updateSettings({ whatsapp_number: whatsappNumber })).data
+      setUser(updatedUser)
+      window.localStorage.setItem('bridge_school_user', JSON.stringify(updatedUser))
       toast.success('WhatsApp number updated')
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not update WhatsApp number')
     }
   }
 
-  const requestEmailChange = (event) => {
-    event.preventDefault()
-    toast.success('Email change request submitted for review')
-    setEmailRequest('')
+  const handleProfilePictureChange = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setProfilePicture(reader.result)
+    reader.readAsDataURL(file)
+    toast.success('Profile picture ready to save')
   }
 
-  const savePreferences = () => {
-    toast.success('Notification preferences saved')
+  const requestEmailChange = async (event) => {
+    event.preventDefault()
+    if (!emailRequest.trim()) return toast.error('Enter a new email address')
+    try {
+      await authApi.requestEmailChange(emailRequest.trim())
+      setEmailChangeStep('verify-current')
+      toast.success('Enter the OTP sent to your current email address')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not start email change')
+    }
+  }
+
+  const verifyCurrentEmailOtp = async (event) => {
+    event.preventDefault()
+    if (!currentEmailOtp.trim()) return toast.error('Enter the code sent to your current email')
+    try {
+      await authApi.verifyCurrentEmailOtp(currentEmailOtp.trim())
+      setEmailChangeStep('verify-new')
+      toast.success('Enter the OTP sent to your new email address')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not verify current email')
+    }
+  }
+
+  const confirmEmailChange = async (event) => {
+    event.preventDefault()
+    if (!newEmailOtp.trim()) return toast.error('Enter the code sent to your new email')
+    try {
+      const updatedUser = (await authApi.confirmEmailChange(newEmailOtp.trim())).data
+      const refreshedUser = await refreshUser()
+      setUser(refreshedUser)
+      window.localStorage.setItem('bridge_school_user', JSON.stringify(refreshedUser))
+      toast.success('Email address updated successfully')
+      setEmailChangeStep('request')
+      setCurrentEmailOtp('')
+      setNewEmailOtp('')
+      setEmailRequest('')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not confirm email change')
+    }
+  }
+
+  const savePreferences = async () => {
+    try {
+      const updatedUser = (await usersApi.updateSettings({
+        email_notifications_enabled: emailEnabled,
+        whatsapp_notifications_enabled: whatsappEnabled,
+      })).data
+      setUser(updatedUser)
+      window.localStorage.setItem('bridge_school_user', JSON.stringify(updatedUser))
+      toast.success('Notification preferences saved')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not save preferences')
+    }
   }
 
   const requestPasswordCode = async () => {
@@ -2403,8 +2481,46 @@ export function SettingsView({ titlePrefix = '' }) {
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Settings`} subtitle="Manage contact details and notification preferences." />
+      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Settings`} subtitle="Manage your account, security, and preferences." />
       <div className="grid gap-6 lg:grid-cols-2">
+        <div className="portal-panel">
+          <div className="text-sm font-medium text-[var(--text-primary)]">Profile Overview</div>
+          <div className="mt-4 flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-[var(--border-default)] bg-[var(--bg-app)] text-xl font-semibold text-[var(--brand-navy)]">
+              {profilePicture || user?.profile_picture_url ? <img src={profilePicture || user?.profile_picture_url} alt="Profile preview" className="h-full w-full object-cover" /> : (user?.name || 'U').charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div className="text-base font-semibold text-[var(--text-primary)]">{user?.name || 'Your profile'}</div>
+              <div className="text-sm text-[var(--text-secondary)]">{user?.email || 'Update your email and security details below.'}</div>
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            <input className="portal-input" value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder="Display name" />
+            <input type="file" accept="image/*" className="portal-input" onChange={handleProfilePictureChange} />
+            <button type="button" className="portal-button-primary" onClick={saveProfile}>Save profile</button>
+          </div>
+        </div>
+        <div className="portal-panel">
+          <div className="text-sm font-medium text-[var(--text-primary)]">Email Address</div>
+          {emailChangeStep === 'request' ? (
+            <form className="mt-4 space-y-3" onSubmit={requestEmailChange}>
+              <input className="portal-input" value={emailRequest} onChange={(event) => setEmailRequest(event.target.value)} placeholder="New email address" />
+              <button type="submit" className="portal-button-primary">Send verification code</button>
+            </form>
+          ) : emailChangeStep === 'verify-current' ? (
+            <form className="mt-4 space-y-3" onSubmit={verifyCurrentEmailOtp}>
+              <p className="text-sm text-[var(--text-secondary)]">Enter the six-digit code sent to your current email address.</p>
+              <input inputMode="numeric" maxLength="6" className="portal-input" value={currentEmailOtp} onChange={(event) => setCurrentEmailOtp(event.target.value)} placeholder="Current email OTP" />
+              <button type="submit" className="portal-button-primary">Verify current email</button>
+            </form>
+          ) : (
+            <form className="mt-4 space-y-3" onSubmit={confirmEmailChange}>
+              <p className="text-sm text-[var(--text-secondary)]">Enter the six-digit code sent to your new email address.</p>
+              <input inputMode="numeric" maxLength="6" className="portal-input" value={newEmailOtp} onChange={(event) => setNewEmailOtp(event.target.value)} placeholder="New email OTP" />
+              <button type="submit" className="portal-button-primary">Confirm email change</button>
+            </form>
+          )}
+        </div>
         <div className="portal-panel">
           <div className="text-sm font-medium text-[var(--text-primary)]">Update WhatsApp Number</div>
           <div className="mt-4 space-y-3">
@@ -2412,13 +2528,6 @@ export function SettingsView({ titlePrefix = '' }) {
             <button type="button" className="portal-button-primary" onClick={saveWhatsapp}>Save</button>
           </div>
         </div>
-        <form className="portal-panel" onSubmit={requestEmailChange}>
-          <div className="text-sm font-medium text-[var(--text-primary)]">Request Email Change</div>
-          <div className="mt-4 space-y-3">
-            <input className="portal-input" value={emailRequest} onChange={(event) => setEmailRequest(event.target.value)} placeholder="New email address" />
-            <button type="submit" className="portal-button-primary">Submit Request</button>
-          </div>
-        </form>
         <div className="portal-panel">
           <div className="text-sm font-medium text-[var(--text-primary)]">Notification Preferences</div>
           <div className="mt-4 space-y-3 text-sm text-[var(--text-primary)]">
