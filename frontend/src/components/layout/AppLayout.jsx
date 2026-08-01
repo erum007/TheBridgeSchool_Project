@@ -26,6 +26,7 @@ const teacherNav = [
     { to: '/teacher/dashboard', label: 'Dashboard', icon: Shield },
     { to: '/teacher/meetings', label: 'Meeting Workspace', icon: CalendarDays },
     { to: '/teacher/results', label: 'Performance Broadcaster', icon: Trophy },
+    { to: '/teacher/notices', label: 'Notice Board', icon: FileText },
     { to: '/teacher/broadcast', label: 'Broadcaster', icon: Megaphone },
     { to: '/teacher/settings', label: 'Settings', icon: Users },
   ] },
@@ -34,6 +35,7 @@ const teacherNav = [
 const staffNav = [
   { label: 'Staff', items: [
     { to: '/staff/dashboard', label: 'Dashboard', icon: Shield },
+    { to: '/staff/notices', label: 'Notice Board', icon: FileText },
     { to: '/staff/settings', label: 'Settings', icon: Users },
   ] },
 ]

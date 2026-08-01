@@ -193,13 +193,23 @@ def serialize_result(result):
 
 
 def serialize_notice(notice):
+    dept_list = getattr(notice, 'recipient_departments', []) or []
+    user_list = getattr(notice, 'recipient_users', []) or []
     return {
         'id': notice.id,
         'title': notice.title,
         'body': notice.body,
-        'recipients': notice.recipients.value if hasattr(notice.recipients, 'value') else notice.recipients,
+        # New multi-recipient fields
+        'recipient_roles': notice.recipient_roles if notice.recipient_roles is not None else [],
+        'recipient_department_ids': [d.id for d in dept_list],
+        'recipient_department_names': [d.name for d in dept_list],
+        'recipient_users': [{'id': u.id, 'name': u.name, 'email': u.email, 'role': str(getattr(u.role, 'value', u.role))} for u in user_list],
+        # Legacy field kept for backwards-compatible display
+        'recipients': (notice.recipient_roles[0] if notice.recipient_roles else 'all'),
         'status': notice.status.value if hasattr(notice.status, 'value') else notice.status,
-        'publish_date': iso(notice.publish_date),
+        'publish_datetime': iso(notice.publish_datetime),
+        # Keep publish_date for any existing consumers still referencing it
+        'publish_date': iso(notice.publish_datetime),
         'created_by': notice.created_by,
         'created_by_name': getattr(getattr(notice, 'created_by_user', None), 'name', None),
         'created_at': iso(notice.created_at),

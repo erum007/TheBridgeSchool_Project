@@ -44,6 +44,8 @@ class NoticeRecipients(str, Enum):
     students = 'students'
     parents = 'parents'
     teachers = 'teachers'
+    staff = 'staff'
+    department = 'department'
 
 
 class WhatsAppStatus(str, Enum):
@@ -82,4 +84,20 @@ user_departments = Table(
     Base.metadata,
     Column('user_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
     Column('department_id', ForeignKey('departments.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
+notice_department_groups = Table(
+    'notice_department_groups',
+    Base.metadata,
+    Column('notice_id', ForeignKey('notices.id', ondelete='CASCADE'), primary_key=True),
+    Column('department_id', ForeignKey('departments.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
+notice_user_groups = Table(
+    'notice_user_groups',
+    Base.metadata,
+    Column('notice_id', ForeignKey('notices.id', ondelete='CASCADE'), primary_key=True),
+    Column('user_id', ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
 )

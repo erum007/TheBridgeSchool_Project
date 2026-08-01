@@ -42,7 +42,72 @@ def apply_additive_schema_updates(engine) -> None:
                     connection.execute(text(f'ALTER TABLE `{table_name}` ADD COLUMN `{column_name}` {definition}'))
         if 'users' in inspector.get_table_names() and engine.dialect.name in {'mysql', 'mariadb'}:
             connection.execute(text("ALTER TABLE `users` MODIFY COLUMN `role` ENUM('admin','teacher','staff','student','parent') NOT NULL"))
+        _migrate_notice_schema(connection, inspector)
         _migrate_whatsapp_action_item_reminders(connection, inspector)
+
+
+def _migrate_notice_schema(connection, inspector) -> None:
+    """Migrate the notices table from the old single-recipient model to the new multi-recipient model."""
+    import json as _json
+    table_names = set(inspector.get_table_names())
+    if 'notices' not in table_names:
+        return
+
+    existing_columns = {col['name'] for col in inspector.get_columns('notices')}
+
+    # Add recipient_roles JSON column if missing
+    if 'recipient_roles' not in existing_columns:
+        connection.execute(text('ALTER TABLE `notices` ADD COLUMN `recipient_roles` JSON NULL'))
+        # Migrate data from old `recipients` enum column if it exists
+        if 'recipients' in existing_columns:
+            rows = connection.execute(text('SELECT id, recipients FROM `notices`')).fetchall()
+            for row in rows:
+                old_value = row[1]
+                new_value = _json.dumps([old_value] if old_value else ['all'])
+                connection.execute(
+                    text('UPDATE `notices` SET `recipient_roles` = :v WHERE id = :id'),
+                    {'v': new_value, 'id': row[0]},
+                )
+        else:
+            # Default to 'all' for existing rows that have no value yet
+            connection.execute(
+                text('UPDATE `notices` SET `recipient_roles` = :v WHERE `recipient_roles` IS NULL'),
+                {'v': _json.dumps(['all'])},
+            )
+
+    # Add publish_datetime column if missing
+    if 'publish_datetime' not in existing_columns:
+        connection.execute(text('ALTER TABLE `notices` ADD COLUMN `publish_datetime` DATETIME NULL'))
+        # Copy old publish_date values into publish_datetime
+        if 'publish_date' in existing_columns:
+            connection.execute(text(
+                'UPDATE `notices` SET `publish_datetime` = CAST(`publish_date` AS DATETIME) '
+                'WHERE `publish_date` IS NOT NULL AND `publish_datetime` IS NULL'
+            ))
+
+    # Create notice_department_groups join table if missing
+    if 'notice_department_groups' not in table_names:
+        connection.execute(text(
+            'CREATE TABLE `notice_department_groups` ('
+            '  `notice_id` INT NOT NULL,'
+            '  `department_id` INT NOT NULL,'
+            '  PRIMARY KEY (`notice_id`, `department_id`),'
+            '  CONSTRAINT `fk_ndg_notice` FOREIGN KEY (`notice_id`) REFERENCES `notices`(`id`) ON DELETE CASCADE,'
+            '  CONSTRAINT `fk_ndg_department` FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON DELETE CASCADE'
+            ')'
+        ))
+
+    # Create notice_user_groups join table if missing
+    if 'notice_user_groups' not in table_names:
+        connection.execute(text(
+            'CREATE TABLE `notice_user_groups` ('
+            '  `notice_id` INT NOT NULL,'
+            '  `user_id` INT NOT NULL,'
+            '  PRIMARY KEY (`notice_id`, `user_id`),'
+            '  CONSTRAINT `fk_nug_notice` FOREIGN KEY (`notice_id`) REFERENCES `notices`(`id`) ON DELETE CASCADE,'
+            '  CONSTRAINT `fk_nug_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE'
+            ')'
+        ))
 
 
 def _migrate_whatsapp_action_item_reminders(connection, inspector) -> None:

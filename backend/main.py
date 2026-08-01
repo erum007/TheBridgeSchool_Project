@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 import os
 
 from fastapi import FastAPI
@@ -21,7 +21,6 @@ from .models import (
     Meeting,
     MeetingStatus,
     Notice,
-    NoticeRecipients,
     NoticeStatus,
     Opportunity,
     Result,
@@ -166,9 +165,9 @@ def _seed_demo_data(db: Session) -> None:
     notice = Notice(
         title='Sports Day Notice',
         body='Sports day is scheduled for next Friday. Please ensure students arrive by 8:00 AM.',
-        recipients=NoticeRecipients.all,
+        recipient_roles=['all'],
         status=NoticeStatus.published,
-        publish_date=date.today(),
+        publish_datetime=datetime.now(timezone.utc),
         created_by=admin.id,
     )
     db.add(notice)

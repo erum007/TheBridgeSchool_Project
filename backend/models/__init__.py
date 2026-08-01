@@ -9,6 +9,8 @@ from .common import (
     UserRole,
     WhatsAppStatus,
     meeting_attendees,
+    notice_department_groups,
+    notice_user_groups,
     parent_student_links,
     teacher_student_links,
     user_departments,

@@ -37,6 +37,7 @@ import {
   ChartColumnBig,
   CirclePlus,
   Download,
+  FileText,
   Send,
   Sparkles,
   Trash2,
@@ -70,6 +71,8 @@ import StatCard from '../components/shared/StatCard.jsx'
 import Tabs from '../components/shared/Tabs.jsx'
 import Table from '../components/shared/Table.jsx'
 import CreateMeetingModal from '../components/shared/CreateMeetingModal.jsx'
+import UserSearchSelect from '../components/shared/UserSearchSelect.jsx'
+import RecipientSearchSelect from '../components/shared/RecipientSearchSelect.jsx'
 const formatDate = (value, pattern = 'PPP') => (value ? format(parseISO(value), pattern) : '—')
 const parentChildPrefix = (user) => user?.role === 'parent' && user.children?.[0]?.name ? `${user.children[0].name}'s ` : ''
 const todayInputValue = () => new Date().toISOString().slice(0, 10)
@@ -77,6 +80,25 @@ const futureDateTimeInputValue = () => {
   const now = new Date()
   now.setMinutes(now.getMinutes() + 1, 0, 0)
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+}
+const formatDateTime = (value, pattern = 'PPP p') => (value ? format(parseISO(value), pattern) : '—')
+const createEmptyNoticeForm = () => ({ title: '', body: '', recipient_roles: ['all'], recipient_department_ids: [], recipient_user_ids: [], status: 'published', publish_mode: 'now', publish_datetime: '' })
+const noticeRoleLabels = {
+  all: 'All',
+  students: 'Students',
+  parents: 'Parents',
+  teachers: 'Teachers',
+  staff: 'Staff',
+}
+const getNoticeRecipientSummary = (notice) => {
+  const roles = Array.isArray(notice?.recipient_roles) ? notice.recipient_roles : []
+  const departments = Array.isArray(notice?.recipient_department_names) ? notice.recipient_department_names : []
+  const usersCount = Array.isArray(notice?.recipient_users) ? notice.recipient_users.length : 0
+  if (!roles.length && !departments.length && !usersCount) return 'All recipients'
+  const roleSummary = roles.includes('all') ? 'All' : roles.map((role) => noticeRoleLabels[role] || role).join(', ')
+  const departmentSummary = departments.length ? `Departments: ${departments.join(', ')}` : ''
+  const usersSummary = usersCount > 0 ? `${usersCount} user${usersCount !== 1 ? 's' : ''}` : ''
+  return [roleSummary, departmentSummary, usersSummary].filter(Boolean).join(' • ')
 }
 
 function AttachmentList({ attachments, onRemove }) {
@@ -424,10 +446,12 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                     {meetings.map((meeting) => <option key={meeting.id} value={meeting.id}>{meeting.title}</option>)}
                   </select>
                   <input className="portal-input" placeholder="Action item description" value={actionForm.description} onChange={(event) => setActionForm({ ...actionForm, description: event.target.value })} />
-                  <div className="relative">
-                    <input className="portal-input" placeholder="Search staff or teacher to assign" value={assigneeSearch} onFocus={() => setAssigneePickerOpen(true)} onBlur={() => setAssigneePickerOpen(false)} onChange={(event) => { setAssigneeSearch(event.target.value); setActionForm({ ...actionForm, assigned_to: '' }) }} />
-                    {assigneePickerOpen ? <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[var(--border-default)] bg-white shadow-lg">{assigneeMatches.length ? assigneeMatches.map((person) => <button key={person.id} type="button" className="block w-full px-3 py-2 text-left text-sm hover:bg-[var(--bg-app)]" onMouseDown={(event) => { event.preventDefault(); setActionForm({ ...actionForm, assigned_to: String(person.id) }); setAssigneeSearch(`${person.name} — ${person.role}`); setAssigneePickerOpen(false) }}><span className="font-medium text-[var(--text-primary)]">{person.name}</span><span className="ml-2 text-xs text-[var(--text-muted)]">{person.role} · {person.email}</span></button>) : <div className="px-3 py-2 text-sm text-[var(--text-muted)]">No eligible people found.</div>}</div> : null}
-                  </div>
+                  <UserSearchSelect
+                    users={assignableUsers}
+                    value={actionForm.assigned_to}
+                    onChange={(id) => setActionForm({ ...actionForm, assigned_to: id })}
+                    placeholder="Search staff or teacher to assign..."
+                  />
                   <select className="portal-input" value={actionForm.email_reminder_frequency} onChange={(event) => setActionForm({ ...actionForm, email_reminder_frequency: event.target.value })}>
                     <option value="none">No email reminder</option>
                     <option value="hourly">Email: hourly</option>
@@ -1571,7 +1595,7 @@ export function PortalManagementView() {
   const { data: opportunities = [], refetch: refetchOpportunities } = useApi(() => opportunitiesApi.list(), [])
   const { data: users = [], refetch: refetchUsers } = useApi(() => usersApi.list(), [])
   const { data: departments = [], refetch: refetchDepartments } = useApi(() => departmentsApi.list(), [])
-  const [noticeForm, setNoticeForm] = useState({ title: '', body: '', recipients: 'all', status: 'draft', publish_date: '' })
+  const [noticeForm, setNoticeForm] = useState({ title: '', body: '', recipient_roles: ['all'], recipient_department_ids: [], recipient_user_ids: [], status: 'published', publish_mode: 'now', publish_datetime: '' })
   const [opportunityForm, setOpportunityForm] = useState({ title: '', eligibility: '', deadline: '', link: '' })
   const [userForm, setUserForm] = useState({ name: '', email: '', role: '', password: '', department: '' })
   const [guardians, setGuardians] = useState([{ name: '', email: '' }])
@@ -1598,12 +1622,43 @@ export function PortalManagementView() {
     setUserForm((current) => ({ ...current, password: password.join('') }))
   }
 
+  const toggleNoticeRole = (role) => {
+    setNoticeForm((current) => {
+      if (role === 'all') return { ...current, recipient_roles: ['all'] }
+      const nextRoles = (current.recipient_roles || []).filter((item) => item !== 'all')
+      if (nextRoles.includes(role)) {
+        return { ...current, recipient_roles: nextRoles.filter((item) => item !== role) }
+      }
+      return { ...current, recipient_roles: [...nextRoles, role] }
+    })
+  }
+
   const submitNotice = async (event) => {
     event.preventDefault()
+    if (!noticeForm.title.trim()) {
+      toast.error('Title is required.')
+      return
+    }
+    const hasRecipients = (noticeForm.recipient_roles?.length > 0) || (noticeForm.recipient_department_ids?.length > 0) || (noticeForm.recipient_user_ids?.length > 0)
+    if (!hasRecipients) {
+      toast.error('At least one recipient is required.')
+      return
+    }
+    if (noticeForm.publish_mode === 'schedule' && !noticeForm.publish_datetime) {
+      toast.error('Please select a date and time for the scheduled notice.')
+      return
+    }
     try {
-      await noticesApi.create(noticeForm)
+      const { publish_mode, ...rest } = noticeForm
+      await noticesApi.create({
+        ...rest,
+        recipient_roles: rest.recipient_roles || [],
+        recipient_department_ids: rest.recipient_department_ids || [],
+        recipient_user_ids: rest.recipient_user_ids || [],
+        publish_datetime: publish_mode === 'now' ? null : rest.publish_datetime,
+      })
       toast.success('Notice created')
-      setNoticeForm({ title: '', body: '', recipients: 'all', status: 'draft', publish_date: '' })
+      setNoticeForm(createEmptyNoticeForm())
       refetchNotices()
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not create notice')
@@ -1612,6 +1667,10 @@ export function PortalManagementView() {
 
   const submitOpportunity = async (event) => {
     event.preventDefault()
+    if (opportunityForm.deadline && opportunityForm.deadline < todayInputValue()) {
+      toast.error('Deadline cannot be in the past')
+      return
+    }
     try {
       await opportunitiesApi.create(opportunityForm)
       toast.success('Opportunity created')
@@ -1795,8 +1854,8 @@ export function PortalManagementView() {
                   loading={false}
                   columns={[
                     { key: 'title', label: 'Title' },
-                    { key: 'recipients', label: 'Recipients', render: (row) => <Badge status={row.recipients} /> },
-                    { key: 'publish_date', label: 'Date', render: (row) => formatDate(row.publish_date) },
+                    { key: 'recipients', label: 'Recipients', render: (row) => <span className="text-sm text-[var(--text-secondary)]">{getNoticeRecipientSummary(row)}</span> },
+                    { key: 'publish_datetime', label: 'Published', render: (row) => row.publish_datetime ? formatDateTime(row.publish_datetime) : <span className="text-xs italic text-[var(--text-muted)]">Immediate</span> },
                     { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
                     { key: 'actions', label: 'Actions', render: (row) => <button className="portal-button-danger" onClick={() => deleteNotice(row.id)}>Delete</button> },
                   ]}
@@ -1804,34 +1863,54 @@ export function PortalManagementView() {
                 />
                 <form className="space-y-4 portal-panel" onSubmit={submitNotice}>
                   <div>
-                    <label className="portal-label block">Title</label>
-                    <input className="portal-input mt-1" value={noticeForm.title} onChange={(event) => setNoticeForm({ ...noticeForm, title: event.target.value })} />
+                    <label className="portal-label block">Title <span className="text-[var(--brand-red)]">*</span></label>
+                    <input className="portal-input mt-1" required value={noticeForm.title} onChange={(event) => setNoticeForm({ ...noticeForm, title: event.target.value })} />
                   </div>
                   <div>
                     <label className="portal-label block">Body</label>
                     <textarea className="portal-input mt-1 min-h-40" value={noticeForm.body} onChange={(event) => setNoticeForm({ ...noticeForm, body: event.target.value })} />
                   </div>
                   <div>
-                    <label className="portal-label block">Recipients</label>
-                    <select className="portal-input mt-1" value={noticeForm.recipients} onChange={(event) => setNoticeForm({ ...noticeForm, recipients: event.target.value })}>
-                      <option value="all">All</option>
-                      <option value="students">Students</option>
-                      <option value="parents">Parents</option>
-                      <option value="teachers">Teachers</option>
-                    </select>
+                    <label className="portal-label block">Recipients <span className="text-[var(--brand-red)]">*</span></label>
+                    <div className="mt-1">
+                      <RecipientSearchSelect
+                        users={users}
+                        departments={departments}
+                        value={{
+                          roles: noticeForm.recipient_roles,
+                          department_ids: noticeForm.recipient_department_ids,
+                          user_ids: noticeForm.recipient_user_ids,
+                        }}
+                        onChange={(nextValue) => setNoticeForm({
+                          ...noticeForm,
+                          recipient_roles: nextValue.roles,
+                          recipient_department_ids: nextValue.department_ids,
+                          recipient_user_ids: nextValue.user_ids,
+                        })}
+                      />
+                    </div>
                   </div>
                   <div>
-                    <label className="portal-label block">Publish date</label>
-                    <input type="date" className="portal-input mt-1" value={noticeForm.publish_date} onChange={(event) => setNoticeForm({ ...noticeForm, publish_date: event.target.value })} />
+                    <label className="portal-label block">When to publish</label>
+                    <div className="mt-2 flex gap-2">
+                      <button type="button" className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${noticeForm.publish_mode === 'now' ? 'border-[var(--brand-blue)] bg-[var(--brand-blue)] text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-app)]'}`} onClick={() => setNoticeForm({ ...noticeForm, publish_mode: 'now', publish_datetime: '', status: 'published' })}>
+                        Publish Now
+                      </button>
+                      <button type="button" className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${noticeForm.publish_mode === 'schedule' ? 'border-[var(--brand-blue)] bg-[var(--brand-blue)] text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-app)]'}`} onClick={() => setNoticeForm({ ...noticeForm, publish_mode: 'schedule', publish_datetime: futureDateTimeInputValue(), status: 'published' })}>
+                        Schedule
+                      </button>
+                      <button type="button" className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${noticeForm.publish_mode === 'draft' ? 'border-[var(--brand-blue)] bg-[var(--brand-blue)] text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-app)]'}`} onClick={() => setNoticeForm({ ...noticeForm, publish_mode: 'draft', publish_datetime: '', status: 'draft' })}>
+                        Save as Draft
+                      </button>
+                    </div>
+                    {noticeForm.publish_mode === 'schedule' && (
+                      <div className="mt-3">
+                        <label className="portal-label block text-xs">Scheduled date &amp; time</label>
+                        <input type="datetime-local" min={futureDateTimeInputValue()} className="portal-input mt-1" value={noticeForm.publish_datetime} onChange={(event) => setNoticeForm({ ...noticeForm, publish_datetime: event.target.value })} />
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="portal-label block">Status</label>
-                    <select className="portal-input mt-1" value={noticeForm.status} onChange={(event) => setNoticeForm({ ...noticeForm, status: event.target.value })}>
-                      <option value="draft">Draft</option>
-                      <option value="published">Published</option>
-                    </select>
-                  </div>
-                  <button type="submit" className="portal-button-primary">Create Notice</button>
+                  <button type="submit" className="portal-button-primary">{noticeForm.publish_mode === 'now' ? 'Publish Notice' : noticeForm.publish_mode === 'schedule' ? 'Schedule Notice' : 'Save Draft'}</button>
                 </form>
               </div>
             ),
@@ -1890,7 +1969,7 @@ export function PortalManagementView() {
                 </div>
                 <div className="space-y-6">
                   <form className="space-y-3 portal-panel" onSubmit={createDepartment}><div className="text-sm font-medium text-[var(--text-primary)]">Create department or domain</div><input required className="portal-input" placeholder="e.g. Admissions or Graduation Committee" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} /><button className="portal-button-primary">Create</button></form>
-                  <div className="space-y-3 portal-panel"><div className="text-sm font-medium text-[var(--text-primary)]">Add a member</div><select className="portal-input" value={selectedDepartmentId} onChange={(event) => setSelectedDepartmentId(event.target.value)}><option value="">Select department/domain</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select><select className="portal-input" value={memberUserId} onChange={(event) => setMemberUserId(event.target.value)}><option value="">Select user</option>{users.map((member) => <option key={member.id} value={member.id}>{member.name} — {member.role}</option>)}</select><button type="button" className="portal-button-primary" onClick={addDepartmentMember}>Add member</button></div>
+                  <div className="space-y-3 portal-panel"><div className="text-sm font-medium text-[var(--text-primary)]">Add a member</div><select className="portal-input" value={selectedDepartmentId} onChange={(event) => setSelectedDepartmentId(event.target.value)}><option value="">Select department/domain</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select><UserSearchSelect users={users} value={memberUserId} onChange={(id) => setMemberUserId(id)} placeholder="Search user to add as member..." /><button type="button" className="portal-button-primary" onClick={addDepartmentMember}>Add member</button></div>
                 </div>
               </div>
             ),
@@ -1972,12 +2051,12 @@ export function PortalManagementView() {
             id: 'user-profile',
             hidden: true,
             label: 'User Profile',
-            content: selectedUser ? <div className="mx-auto max-w-3xl space-y-6"><div className="portal-panel"><div className="mb-5"><div className="text-xl font-semibold text-[var(--text-primary)]">{selectedUser.name}</div><div className="text-sm text-[var(--text-muted)]">Full user record and account controls</div></div><form className="space-y-4" onSubmit={saveProfile}><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Name</label><input required className="portal-input mt-1" value={selectedUser.name} onChange={(event) => setSelectedUser({ ...selectedUser, name: event.target.value })} /></div><div><label className="portal-label block">Email</label><input required type="email" className="portal-input mt-1" value={selectedUser.email} onChange={(event) => setSelectedUser({ ...selectedUser, email: event.target.value })} /></div></div><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Role</label><select className="portal-input mt-1" value={selectedUser.role} onChange={(event) => setSelectedUser({ ...selectedUser, role: event.target.value })}><option value="admin">Admin</option><option value="teacher">Teacher</option><option value="staff">Staff</option><option value="student">Student</option><option value="parent">Parent / Guardian</option></select></div><label className="mt-7 flex items-center gap-2 text-sm text-[var(--text-primary)]"><input type="checkbox" checked={selectedUser.is_active} onChange={(event) => setSelectedUser({ ...selectedUser, is_active: event.target.checked })} /> Account active</label></div><div className="flex flex-wrap gap-3"><button className="portal-button-primary">Save profile</button><button type="button" className="portal-button-danger" onClick={() => deleteUser(selectedUser.id)}>Remove user</button></div></form></div>{selectedUser.role === 'student' ? <div className="portal-panel"><div className="font-medium text-[var(--text-primary)]">Parents / guardians</div><p className="mt-1 text-xs text-[var(--text-muted)]">One or two guardians are required for every student.</p><div className="mt-3 space-y-2">{selectedUser.guardians?.map((guardian) => <div key={guardian.id} className="flex items-center justify-between gap-3 rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]"><span>{guardian.name} <span className="text-[var(--text-muted)]">— {guardian.email}</span></span><button type="button" className="portal-button-danger" onClick={() => unlinkGuardian(guardian.id)}>Unlink</button></div>)}</div>{(selectedUser.guardians?.length || 0) < 2 ? <div className="mt-3 flex gap-2"><select className="portal-input" value={parentToLink} onChange={(event) => setParentToLink(event.target.value)}><option value="">Link existing parent / guardian</option>{users.filter((person) => person.role === 'parent' && !selectedUser.guardians?.some((guardian) => guardian.id === person.id)).map((parent) => <option key={parent.id} value={parent.id}>{parent.name} — {parent.email}</option>)}</select><button type="button" className="portal-button-secondary" onClick={linkGuardian}>Link</button></div> : null}</div> : null}{selectedUser.role === 'parent' ? <div className="portal-panel"><div className="font-medium text-[var(--text-primary)]">Linked students</div><div className="mt-3 space-y-2">{selectedUser.children?.map((student) => <div key={student.id} className="rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]">{student.name} <span className="text-[var(--text-muted)]">— {student.email}</span></div>)}</div></div> : null}</div> : <EmptyState title="Select a user" message="Choose a person in User Management to open their complete profile." />,
+            content: selectedUser ? <div className="mx-auto max-w-3xl space-y-6"><div className="portal-panel"><div className="mb-5"><div className="text-xl font-semibold text-[var(--text-primary)]">{selectedUser.name}</div><div className="text-sm text-[var(--text-muted)]">Full user record and account controls</div></div><form className="space-y-4" onSubmit={saveProfile}><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Name</label><input required className="portal-input mt-1" value={selectedUser.name} onChange={(event) => setSelectedUser({ ...selectedUser, name: event.target.value })} /></div><div><label className="portal-label block">Email</label><input required type="email" className="portal-input mt-1" value={selectedUser.email} onChange={(event) => setSelectedUser({ ...selectedUser, email: event.target.value })} /></div></div><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Role</label><select className="portal-input mt-1" value={selectedUser.role} onChange={(event) => setSelectedUser({ ...selectedUser, role: event.target.value })}><option value="admin">Admin</option><option value="teacher">Teacher</option><option value="staff">Staff</option><option value="student">Student</option><option value="parent">Parent / Guardian</option></select></div><label className="mt-7 flex items-center gap-2 text-sm text-[var(--text-primary)]"><input type="checkbox" checked={selectedUser.is_active} onChange={(event) => setSelectedUser({ ...selectedUser, is_active: event.target.checked })} /> Account active</label></div><div className="flex flex-wrap gap-3"><button className="portal-button-primary">Save profile</button><button type="button" className="portal-button-danger" onClick={() => deleteUser(selectedUser.id)}>Remove user</button></div></form></div>{selectedUser.role === 'student' ? <div className="portal-panel"><div className="font-medium text-[var(--text-primary)]">Parents / guardians</div><p className="mt-1 text-xs text-[var(--text-muted)]">One or two guardians are required for every student.</p><div className="mt-3 space-y-2">{selectedUser.guardians?.map((guardian) => <div key={guardian.id} className="flex items-center justify-between gap-3 rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]"><span>{guardian.name} <span className="text-[var(--text-muted)]">— {guardian.email}</span></span><button type="button" className="portal-button-danger" onClick={() => unlinkGuardian(guardian.id)}>Unlink</button></div>)}</div>{(selectedUser.guardians?.length || 0) < 2 ? <div className="mt-3 flex flex-wrap gap-2 items-center"><div className="flex-1 min-w-[200px]"><UserSearchSelect users={users} filterRole="parent" excludeIds={selectedUser.guardians?.map((g) => g.id) || []} value={parentToLink} onChange={(id) => setParentToLink(id)} placeholder="Search parent / guardian..." /></div><button type="button" className="portal-button-secondary" onClick={linkGuardian}>Link</button></div> : null}</div> : null}{selectedUser.role === 'parent' ? <div className="portal-panel"><div className="font-medium text-[var(--text-primary)]">Linked students</div><div className="mt-3 space-y-2">{selectedUser.children?.map((student) => <div key={student.id} className="rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]">{student.name} <span className="text-[var(--text-muted)]">— {student.email}</span></div>)}</div></div> : null}</div> : <EmptyState title="Select a user" message="Choose a person in User Management to open their complete profile." />,
           },
         ]}
       />
       <Modal isOpen={Boolean(selectedUser)} onClose={() => setSelectedUser(null)} title={selectedUser ? `${selectedUser.name} — User Profile` : 'User Profile'} size="large">
-        {selectedUser ? <div className="space-y-5"><form className="space-y-4" onSubmit={saveProfile}><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Name</label><input required className="portal-input mt-1" value={selectedUser.name} onChange={(event) => setSelectedUser({ ...selectedUser, name: event.target.value })} /></div><div><label className="portal-label block">Email</label><input required type="email" className="portal-input mt-1" value={selectedUser.email} onChange={(event) => setSelectedUser({ ...selectedUser, email: event.target.value })} /></div></div><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Role</label><select className="portal-input mt-1" value={selectedUser.role} onChange={(event) => setSelectedUser({ ...selectedUser, role: event.target.value })}><option value="admin">Admin</option><option value="teacher">Teacher</option><option value="staff">Staff</option><option value="student">Student</option><option value="parent">Parent / Guardian</option></select></div><label className="mt-7 flex items-center gap-2 text-sm text-[var(--text-primary)]"><input type="checkbox" checked={selectedUser.is_active} onChange={(event) => setSelectedUser({ ...selectedUser, is_active: event.target.checked })} /> Account active</label></div><div className="flex flex-wrap gap-3"><button className="portal-button-primary">Save profile</button><button type="button" className="portal-button-danger" onClick={() => deleteUser(selectedUser.id)}>Remove user</button></div></form>{selectedUser.role === 'student' ? <div className="border-t border-[var(--border-default)] pt-4"><div className="font-medium text-[var(--text-primary)]">Parents / guardians</div><p className="mt-1 text-xs text-[var(--text-muted)]">One or two guardians are required.</p><div className="mt-3 space-y-2">{selectedUser.guardians?.map((guardian) => <div key={guardian.id} className="flex items-center justify-between gap-3 rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]"><span>{guardian.name} <span className="text-[var(--text-muted)]">— {guardian.email}</span></span><button type="button" className="portal-button-danger" onClick={() => unlinkGuardian(guardian.id)}>Unlink</button></div>)}</div>{(selectedUser.guardians?.length || 0) < 2 ? <div className="mt-3 flex gap-2"><select className="portal-input" value={parentToLink} onChange={(event) => setParentToLink(event.target.value)}><option value="">Link existing parent / guardian</option>{users.filter((person) => person.role === 'parent' && !selectedUser.guardians?.some((guardian) => guardian.id === person.id)).map((parent) => <option key={parent.id} value={parent.id}>{parent.name} — {parent.email}</option>)}</select><button type="button" className="portal-button-secondary" onClick={linkGuardian}>Link</button></div> : null}</div> : null}{selectedUser.role === 'parent' ? <div className="border-t border-[var(--border-default)] pt-4"><div className="font-medium text-[var(--text-primary)]">Linked students</div><div className="mt-3 space-y-2">{selectedUser.children?.map((student) => <div key={student.id} className="rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]">{student.name} <span className="text-[var(--text-muted)]">— {student.email}</span></div>)}</div></div> : null}</div> : null}
+        {selectedUser ? <div className="space-y-5"><form className="space-y-4" onSubmit={saveProfile}><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Name</label><input required className="portal-input mt-1" value={selectedUser.name} onChange={(event) => setSelectedUser({ ...selectedUser, name: event.target.value })} /></div><div><label className="portal-label block">Email</label><input required type="email" className="portal-input mt-1" value={selectedUser.email} onChange={(event) => setSelectedUser({ ...selectedUser, email: event.target.value })} /></div></div><div className="grid gap-4 sm:grid-cols-2"><div><label className="portal-label block">Role</label><select className="portal-input mt-1" value={selectedUser.role} onChange={(event) => setSelectedUser({ ...selectedUser, role: event.target.value })}><option value="admin">Admin</option><option value="teacher">Teacher</option><option value="staff">Staff</option><option value="student">Student</option><option value="parent">Parent / Guardian</option></select></div><label className="mt-7 flex items-center gap-2 text-sm text-[var(--text-primary)]"><input type="checkbox" checked={selectedUser.is_active} onChange={(event) => setSelectedUser({ ...selectedUser, is_active: event.target.checked })} /> Account active</label></div><div className="flex flex-wrap gap-3"><button className="portal-button-primary">Save profile</button><button type="button" className="portal-button-danger" onClick={() => deleteUser(selectedUser.id)}>Remove user</button></div></form>{selectedUser.role === 'student' ? <div className="border-t border-[var(--border-default)] pt-4"><div className="font-medium text-[var(--text-primary)]">Parents / guardians</div><p className="mt-1 text-xs text-[var(--text-muted)]">One or two guardians are required.</p><div className="mt-3 space-y-2">{selectedUser.guardians?.map((guardian) => <div key={guardian.id} className="flex items-center justify-between gap-3 rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]"><span>{guardian.name} <span className="text-[var(--text-muted)]">— {guardian.email}</span></span><button type="button" className="portal-button-danger" onClick={() => unlinkGuardian(guardian.id)}>Unlink</button></div>)}</div>{(selectedUser.guardians?.length || 0) < 2 ? <div className="mt-3 flex flex-wrap gap-2 items-center"><div className="flex-1 min-w-[200px]"><UserSearchSelect users={users} filterRole="parent" excludeIds={selectedUser.guardians?.map((g) => g.id) || []} value={parentToLink} onChange={(id) => setParentToLink(id)} placeholder="Search parent / guardian..." /></div><button type="button" className="portal-button-secondary" onClick={linkGuardian}>Link</button></div> : null}</div> : null}{selectedUser.role === 'parent' ? <div className="border-t border-[var(--border-default)] pt-4"><div className="font-medium text-[var(--text-primary)]">Linked students</div><div className="mt-3 space-y-2">{selectedUser.children?.map((student) => <div key={student.id} className="rounded-lg bg-[var(--bg-app)] px-3 py-2 text-sm text-[var(--text-primary)]">{student.name} <span className="text-[var(--text-muted)]">— {student.email}</span></div>)}</div></div> : null}</div> : null}
       </Modal>
       <Modal isOpen={Boolean(userPendingDeletion)} onClose={() => setUserPendingDeletion(null)} title="Remove User" footer={<><button type="button" className="portal-button-secondary" onClick={() => setUserPendingDeletion(null)}>Cancel</button><button type="button" className="portal-button-primary bg-[var(--brand-red)] hover:bg-[var(--brand-red-dark)]" onClick={() => deleteUser()}>Remove User</button></>}><p className="text-sm text-[var(--text-secondary)]">Remove <strong className="text-[var(--text-primary)]">{userPendingDeletion?.name}</strong> ({userPendingDeletion?.email})? Their access will be revoked.</p></Modal>
     </div>
@@ -2215,23 +2294,25 @@ export function NoticeBoardView({ titlePrefix = '' }) {
   return (
     <div>
       <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Notice Board`} subtitle="Read recent notices and announcements." />
-      <div className="grid gap-4 md:grid-cols-2">
-        {notices.map((notice) => (
-          <button key={notice.id} type="button" className="portal-panel text-left transition hover:bg-[var(--bg-app)]" onClick={() => setOpenNotice(notice)}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="text-base font-medium text-[var(--text-primary)]">{notice.title}</div>
-              <Badge status={notice.recipients} />
-            </div>
-            <div className="mt-2 text-sm text-[var(--text-secondary)]">{notice.body.slice(0, 100)}</div>
-            <div className="mt-4 text-xs text-[var(--text-muted)]">{formatDate(notice.publish_date || notice.created_at)}</div>
-          </button>
-        ))}
-      </div>
+      {notices.length === 0 ? (
+        <EmptyState icon={FileText} title="No notices yet" />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {notices.map((notice) => (
+            <button key={notice.id} type="button" className="portal-panel text-left transition hover:bg-[var(--bg-app)]" onClick={() => setOpenNotice(notice)}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-base font-medium text-[var(--text-primary)]">{notice.title}</div>
+              </div>
+              <div className="mt-2 text-sm text-[var(--text-secondary)]">{notice.body?.slice(0, 120)}{notice.body?.length > 120 ? '...' : ''}</div>
+              <div className="mt-4 text-xs text-[var(--text-muted)]">{formatDateTime(notice.publish_datetime || notice.created_at)}</div>
+            </button>
+          ))}
+        </div>
+      )}
       <Modal isOpen={Boolean(openNotice)} onClose={() => setOpenNotice(null)} title={openNotice?.title || 'Notice'}>
         <div className="space-y-4 text-sm text-[var(--text-secondary)]">
-          <Badge status={openNotice?.recipients || 'all'} />
-          <p>{openNotice?.body}</p>
-          <div className="text-xs text-[var(--text-muted)]">Published {openNotice ? formatDate(openNotice.publish_date || openNotice.created_at) : ''}</div>
+          <p style={{ whiteSpace: 'pre-wrap' }}>{openNotice?.body}</p>
+          <div className="text-xs text-[var(--text-muted)]">{openNotice ? formatDateTime(openNotice.publish_datetime || openNotice.created_at) : ''}</div>
         </div>
       </Modal>
     </div>

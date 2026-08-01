@@ -4,6 +4,7 @@ import { usersApi } from '../../api/users.js'
 import { meetingsApi } from '../../api/meetings.js'
 import { useApi } from '../../hooks/useApi.js'
 import Modal from './Modal.jsx'
+import UserSearchSelect from './UserSearchSelect.jsx'
 
 const departments = ['Academic', 'Operations', 'Admissions', 'Student Affairs', 'Finance', 'Custom']
 const emptyForm = {
@@ -117,10 +118,14 @@ export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
                 </div>
               </div>
               <div>
-                <div className="portal-label">Specific people</div>
-                <div className="mt-2 max-h-36 overflow-y-auto rounded-lg border border-[var(--border-default)] bg-white p-2">
-                  {users.map((user) => <label key={user.id} className="flex items-center gap-2 py-1.5 text-sm"><input type="checkbox" checked={form.attendee_ids.includes(user.id)} onChange={() => toggleListValue('attendee_ids', user.id)} /><span>{user.name}</span><span className="text-xs text-[var(--text-muted)]">{user.departments?.join(', ') || 'No department/domain'}</span></label>)}
-                </div>
+                <div className="portal-label mb-2">Specific people</div>
+                <UserSearchSelect
+                  multiple
+                  users={users}
+                  value={form.attendee_ids}
+                  onChange={(attendee_ids) => setForm({ ...form, attendee_ids })}
+                  placeholder="Search & select people by name, email..."
+                />
               </div>
             </div>
             <div className="mt-4">
