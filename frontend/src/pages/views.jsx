@@ -151,6 +151,11 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   const { data: actionItems = [], error: actionItemsError, refetch: refetchActions } = useApi(() => actionItemsApi.list(), [])
   const { data: users = [], error: usersError } = useApi(() => usersApi.list(), [])
   const [meetingModalOpen, setMeetingModalOpen] = useState(false)
+  const [localActionItems, setLocalActionItems] = useState([])
+  const [pendingActionStatusIds, setPendingActionStatusIds] = useState({})
+  const [pendingReminderIds, setPendingReminderIds] = useState({})
+  const [cooldownReminderIds, setCooldownReminderIds] = useState({})
+  const localActionItemsRef = useRef([])
   const [selectedPastMeeting, setSelectedPastMeeting] = useState(null)
   const [notes, setNotes] = useState('')
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -165,10 +170,15 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
 
   const visibleMeetings = meetings.filter((meeting) => meeting.status)
   const pastMeetings = useMemo(() => meetings.filter((meeting) => meeting.status === 'past'), [meetings])
+  useEffect(() => {
+    setLocalActionItems(actionItems)
+    localActionItemsRef.current = actionItems
+  }, [actionItems])
   const filteredActions = useMemo(() => {
-    if (assigneeFilter === 'all') return actionItems
-    return actionItems.filter((item) => String(item.assigned_to) === String(assigneeFilter))
-  }, [actionItems, assigneeFilter])
+    const visibleItems = localActionItems.length ? localActionItems : actionItems
+    if (assigneeFilter === 'all') return visibleItems
+    return visibleItems.filter((item) => String(item.assigned_to) === String(assigneeFilter))
+  }, [actionItems, assigneeFilter, localActionItems])
   const assignableUsers = useMemo(() => users.filter((person) => person.is_active && ['admin', 'teacher', 'staff'].includes(person.role)), [users])
   const assigneeMatches = useMemo(() => {
     const query = assigneeSearch.trim().toLowerCase()
@@ -320,13 +330,28 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   }))
 
   const changeActionStatus = async (id, status) => {
+    const actionItemId = String(id)
+    const previousStatus = localActionItemsRef.current.find((item) => String(item.id) === actionItemId)?.status
+
+    setPendingActionStatusIds((current) => ({ ...current, [actionItemId]: true }))
+    setLocalActionItems((current) => current.map((item) => (String(item.id) === actionItemId ? { ...item, status } : item)))
+    localActionItemsRef.current = localActionItemsRef.current.map((item) => (String(item.id) === actionItemId ? { ...item, status } : item))
+
     try {
       await actionItemsApi.update(id, { status })
       refetchActions()
       toast.success('Action item updated')
     } catch (error) {
+      setLocalActionItems((current) => current.map((item) => (String(item.id) === actionItemId ? { ...item, status: previousStatus || item.status } : item)))
+      localActionItemsRef.current = localActionItemsRef.current.map((item) => (String(item.id) === actionItemId ? { ...item, status: previousStatus || item.status } : item))
       console.error('Failed to update action item status', error)
       toast.error(error?.response?.data?.detail || 'Could not update action item')
+    } finally {
+      setPendingActionStatusIds((current) => {
+        const next = { ...current }
+        delete next[actionItemId]
+        return next
+      })
     }
   }
 
@@ -342,6 +367,35 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     } catch (error) {
       console.error('Failed to create action item', error)
       toast.error(error?.response?.data?.detail || 'Could not create action item')
+    }
+  }
+
+  const sendReminderNow = async (id) => {
+    const actionItemId = String(id)
+    if (pendingReminderIds[actionItemId] || cooldownReminderIds[actionItemId]) {
+      return
+    }
+    setPendingReminderIds((current) => ({ ...current, [actionItemId]: true }))
+    try {
+      const response = await actionItemsApi.sendReminderNow(id)
+      toast.success(response?.data?.detail || 'Reminder sent')
+      setCooldownReminderIds((current) => ({ ...current, [actionItemId]: true }))
+      window.setTimeout(() => {
+        setCooldownReminderIds((current) => {
+          const next = { ...current }
+          delete next[actionItemId]
+          return next
+        })
+      }, 4000)
+    } catch (error) {
+      console.error('Failed to send reminder now', error)
+      toast.error(error?.response?.data?.detail || 'Could not send reminder')
+    } finally {
+      setPendingReminderIds((current) => {
+        const next = { ...current }
+        delete next[actionItemId]
+        return next
+      })
     }
   }
 
@@ -439,7 +493,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                     </select>
                   </div>
                 </div>
-                <KanbanBoard columns={boardColumns} onStatusChange={changeActionStatus} />
+                <KanbanBoard columns={boardColumns} onStatusChange={changeActionStatus} pendingStatusItemIds={pendingActionStatusIds} onSendReminderNow={sendReminderNow} pendingReminderIds={pendingReminderIds} cooldownReminderIds={cooldownReminderIds} />
                 <form className="grid gap-4 portal-panel lg:grid-cols-4" onSubmit={createActionItem}>
                   <select className="portal-input" value={actionForm.meeting_id} onChange={(event) => setActionForm({ ...actionForm, meeting_id: event.target.value })}>
                     <option value="">Select meeting</option>

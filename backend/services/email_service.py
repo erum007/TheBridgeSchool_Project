@@ -167,6 +167,7 @@ def send_plain_email(
     html_body: str = None,
     attachments: list[tuple[str, str]] | None = None,
 ) -> bool:
+    logger.info("[reminder-debug] send_plain_email entered for %s", to_email)
     """
     Sends an email through Gmail SMTP.
 
@@ -213,6 +214,7 @@ def send_plain_email(
             logger.warning("Email attachment is unavailable: %s", path)
 
     try:
+        logger.info("[reminder-debug] about to call smtplib.send_message for %s", to_email)
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(settings.gmail_sender, settings.gmail_app_password)
             server.send_message(message)
@@ -258,29 +260,54 @@ def send_action_item_reminders(action_items) -> int:
     """Send reminders for due or overdue action items, grouped by assignee."""
     today = date.today()
     grouped: dict[int, list] = defaultdict(list)
+    total_items = len(action_items or [])
+    completed_skipped = 0
+    missing_due_date_skipped = 0
+    future_due_date_skipped = 0
+    missing_assignee_skipped = 0
+    missing_email_skipped = 0
+
+    logger.info('[reminder-debug] send_action_item_reminders received %s action items', total_items)
 
     for action_item in action_items or []:
         if _is_completed(getattr(action_item, 'status', None)):
+            completed_skipped += 1
             continue
         due_date = getattr(action_item, 'due_date', None)
         if due_date is None:
+            missing_due_date_skipped += 1
             continue
         if isinstance(due_date, str):
             try:
                 due_date = datetime.fromisoformat(due_date).date()
             except ValueError:
+                missing_due_date_skipped += 1
                 continue
         if due_date > today:
+            future_due_date_skipped += 1
             continue
         assignee_id = getattr(action_item, 'assigned_to', None)
         if assignee_id is None:
+            missing_assignee_skipped += 1
             continue
         grouped[assignee_id].append(action_item)
 
+    logger.info(
+        '[reminder-debug] summary skipped completed=%s missing_due_date=%s future_due_date=%s missing_assignee=%s',
+        completed_skipped,
+        missing_due_date_skipped,
+        future_due_date_skipped,
+        missing_assignee_skipped,
+    )
+
     reminder_items = 0
-    for items in grouped.values():
+    for assignee_id, items in grouped.items():
         assignee = getattr(items[0], 'assigned_to_user', None)
         if not assignee:
+            missing_email_skipped += 1
+            continue
+        if not assignee.email:
+            missing_email_skipped += 1
             continue
         body_lines = [f'Hello {assignee.name}, here are your pending action items:']
         for item in items:
@@ -288,4 +315,7 @@ def send_action_item_reminders(action_items) -> int:
             body_lines.append(f'- {item.description} (due {due_label})')
         send_gmail_message(assignee.email, 'Action item reminder', '\n'.join(body_lines))
         reminder_items += len(items)
+
+    logger.info('[reminder-debug] final send count=%s', reminder_items)
+    logger.info('[reminder-debug] skipped missing_email=%s', missing_email_skipped)
     return reminder_items

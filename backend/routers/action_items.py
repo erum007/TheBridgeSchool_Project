@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from ..dependencies import get_current_user, get_db, require_roles
 from ..models import ActionItem, ActionItemEmailReminder, ActionItemStatus, User, UserRole
 from ..schemas import ActionItemCreate, ActionItemUpdate
-from ..services.action_item_email_reminder_service import VALID_FREQUENCIES, cancel_reminder, parse_run_at, schedule_reminder
+from ..services.action_item_email_reminder_service import VALID_FREQUENCIES, cancel_reminder, parse_run_at, schedule_reminder, send_manual_reminder
 from ..services.serialization import serialize_action_item
 
 
@@ -120,6 +120,19 @@ def update_action_item(action_item_id: int, payload: ActionItemUpdate, db: Sessi
         db.commit()
     action_item = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user), selectinload(ActionItem.email_reminder)).filter(ActionItem.id == action_item_id).first()
     return serialize_action_item(action_item)
+
+
+@router.post('/{action_item_id}/send-reminder-now')
+def send_reminder_now(action_item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    action_item = db.query(ActionItem).options(selectinload(ActionItem.assigned_to_user), selectinload(ActionItem.email_reminder)).filter(ActionItem.id == action_item_id).first()
+    if not action_item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Action item not found')
+    if current_user.role != UserRole.admin and action_item.assigned_to != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Insufficient permissions')
+    sent, message = send_manual_reminder(action_item_id)
+    if not sent:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    return {'detail': message, 'sent': True}
 
 
 @router.post('/{action_item_id}/complete')

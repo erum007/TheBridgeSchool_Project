@@ -90,6 +90,52 @@ The Bridge School Portal"""
     return subject, body, html_body
 
 
+def _is_completed_action_item(action_item) -> bool:
+    status = getattr(action_item, 'status', None)
+    if status is None:
+        return False
+    if isinstance(status, ActionItemStatus):
+        return status == ActionItemStatus.done
+    if isinstance(status, str):
+        return status == ActionItemStatus.done.value or status == ActionItemStatus.done.name
+    return False
+
+
+def _deliver_reminder_from_action_item(db, action_item, reminder=None, reminder_id: int | None = None) -> tuple[bool, str]:
+    if not action_item or _is_completed_action_item(action_item):
+        if reminder is not None:
+            reminder.is_active = False
+            db.commit()
+            cancel_reminder(reminder_id)
+        return False, 'Action item is already completed.'
+
+    assignee = db.get(User, action_item.assigned_to)
+    if not assignee:
+        assignee = getattr(action_item, 'assigned_to_user', None)
+    if not assignee:
+        assignee = getattr(action_item, 'assignee', None)
+    if not assignee or not getattr(assignee, 'email', None):
+        logger.warning('Skipping reminder %s because assignee %s has no email address', reminder_id, action_item.assigned_to)
+        return False, 'Assignee has no email address.'
+
+    subject, body, html_body = _build_reminder_email(
+        assignee.name,
+        action_item.description,
+        action_item.due_date,
+    )
+    sent = send_plain_email(assignee.email, subject, body, html_body=html_body)
+    if not sent:
+        logger.warning('Reminder email %s could not be sent to %s', reminder_id, assignee.email)
+        return False, 'Email delivery failed.'
+
+    if reminder is not None:
+        reminder.last_sent_at = datetime.now(timezone.utc)
+        if reminder.frequency == 'custom':
+            reminder.is_active = False
+        db.commit()
+    return True, 'Reminder email sent successfully.'
+
+
 def _deliver_reminder(reminder_id: int) -> None:
     db = SessionLocal()
     try:
@@ -97,32 +143,27 @@ def _deliver_reminder(reminder_id: int) -> None:
         if not reminder or not reminder.is_active:
             return
         action_item = db.get(ActionItem, reminder.action_item_id)
-        if not action_item or action_item.status == ActionItemStatus.done:
-            reminder.is_active = False
-            db.commit()
-            cancel_reminder(reminder_id)
-            return
-        assignee = db.get(User, action_item.assigned_to)
-        if not assignee or not assignee.email:
-            logger.warning('Skipping reminder %s because assignee %s has no email address', reminder_id, action_item.assigned_to)
-            return
-        subject, body, html_body = _build_reminder_email(
-            assignee.name,
-            action_item.description,
-            action_item.due_date,
-        )
-        sent = send_plain_email(assignee.email, subject, body, html_body=html_body)
-        if not sent:
-            logger.warning('Reminder email %s could not be sent to %s', reminder_id, assignee.email)
-            return
-        reminder.last_sent_at = datetime.now(timezone.utc)
-        if reminder.frequency == 'custom':
-            reminder.is_active = False
-        db.commit()
+        _deliver_reminder_from_action_item(db, action_item, reminder=reminder, reminder_id=reminder_id)
     except Exception:
         logger.exception('Failed to deliver reminder %s', reminder_id)
     finally:
         db.close()
+
+
+def send_manual_reminder(action_item_id: int) -> tuple[bool, str]:
+    db = SessionLocal()
+    try:
+        action_item = db.get(ActionItem, action_item_id)
+        if not action_item:
+            return False, 'Action item not found.'
+        return _deliver_reminder_from_action_item(db, action_item, reminder_id=action_item_id)
+    except Exception:
+        logger.exception('Failed to send manual reminder for action item %s', action_item_id)
+        return False, 'Email delivery failed.'
+    finally:
+        close_session = getattr(db, 'close', None)
+        if callable(close_session):
+            close_session()
 
 
 def schedule_reminder(reminder: ActionItemEmailReminder) -> None:

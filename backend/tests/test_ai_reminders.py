@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from backend.models import ActionItem, User
 from backend.services import ai_service, email_service
+from backend.services.action_item_email_reminder_service import send_manual_reminder
 
 
 @pytest.fixture(autouse=True)
@@ -110,3 +112,22 @@ def test_send_action_item_reminders_groups_multiple_items_per_assignee_into_one_
     assert 'Review lesson plans' in first_call.args[2]
     assert 'Confirm parent meeting' in first_call.args[2]
     assert second_call.args[0] == 'tina@example.com'
+
+
+def test_send_manual_reminder_uses_existing_delivery_flow():
+    action_item = SimpleNamespace(id=4, description='Prepare handover notes', assigned_to=2, assigned_to_user=SimpleNamespace(id=2, name='Nadia', email='nadia@example.com'), due_date=None, status='todo')
+    assignee = action_item.assigned_to_user
+
+    with patch('backend.services.action_item_email_reminder_service.send_plain_email', return_value=True) as mock_send, \
+         patch('backend.services.action_item_email_reminder_service.SessionLocal') as mock_session_factory:
+        db = SimpleNamespace(get=lambda model, ident=None: {
+            ActionItem: action_item,
+            User: assignee,
+        }.get(model, None))
+        mock_session_factory.return_value = db
+
+        sent, message = send_manual_reminder(action_item.id)
+
+    assert sent is True
+    assert 'sent' in message.lower()
+    mock_send.assert_called_once()
