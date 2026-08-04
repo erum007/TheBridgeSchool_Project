@@ -64,8 +64,12 @@ export default function Sidebar({ mobileOpen, navGroups = [], schoolName = 'Brid
         </nav>
         <div className="border-t border-white/10 p-4">
           <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--brand-red)] font-display text-xs font-bold text-white">
-              {initials}
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-[var(--brand-red)] font-display text-xs font-bold text-white">
+              {user?.profile_picture_url ? (
+                <img src={user.profile_picture_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                initials
+              )}
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-white">{user?.name}</p>

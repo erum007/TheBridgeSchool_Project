@@ -81,6 +81,30 @@ const futureDateTimeInputValue = () => {
   now.setMinutes(now.getMinutes() + 1, 0, 0)
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
 }
+const prepareProfileImage = (file) => new Promise((resolve, reject) => {
+  if (!file.type.startsWith('image/')) return reject(new Error('Choose an image file'))
+  const source = new Image()
+  const objectUrl = URL.createObjectURL(file)
+  source.onload = () => {
+    URL.revokeObjectURL(objectUrl)
+    const cropSize = Math.min(source.naturalWidth, source.naturalHeight)
+    const startX = Math.floor((source.naturalWidth - cropSize) / 2)
+    const startY = Math.floor((source.naturalHeight - cropSize) / 2)
+    for (const size of [256, 192, 160, 128, 96]) {
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      canvas.getContext('2d').drawImage(source, startX, startY, cropSize, cropSize, 0, 0, size, size)
+      for (const quality of [0.78, 0.62, 0.46]) {
+        const image = canvas.toDataURL('image/jpeg', quality)
+        if (image.length <= 3000) return resolve(image)
+      }
+    }
+    reject(new Error('This image could not be optimized. Please choose another image.'))
+  }
+  source.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('The image could not be read')) }
+  source.src = objectUrl
+})
 const formatDateTime = (value, pattern = 'PPP p') => (value ? format(parseISO(value), pattern) : '—')
 const createEmptyNoticeForm = () => ({ title: '', body: '', recipient_roles: ['all'], recipient_department_ids: [], recipient_user_ids: [], status: 'published', publish_mode: 'now', publish_datetime: '' })
 const noticeRoleLabels = {
@@ -2405,14 +2429,12 @@ export function OpportunityBoardView({ titlePrefix = '' }) {
 export function SettingsView({ titlePrefix = '' }) {
   const { user, setUser, refreshUser } = useAuth()
   const [profileName, setProfileName] = useState(user?.name || '')
-  const [whatsappNumber, setWhatsappNumber] = useState(user?.whatsapp_number || '')
   const [emailRequest, setEmailRequest] = useState('')
   const [currentEmailOtp, setCurrentEmailOtp] = useState('')
   const [newEmailOtp, setNewEmailOtp] = useState('')
   const [emailChangeStep, setEmailChangeStep] = useState('request')
   const [profilePicture, setProfilePicture] = useState('')
   const [emailEnabled, setEmailEnabled] = useState(user?.email_notifications_enabled ?? true)
-  const [whatsappEnabled, setWhatsappEnabled] = useState(user?.whatsapp_notifications_enabled ?? true)
   const [passwordForm, setPasswordForm] = useState({ otp: '', new_password: '', confirm_password: '' })
   const [passwordCodeSent, setPasswordCodeSent] = useState(false)
 
@@ -2421,35 +2443,22 @@ export function SettingsView({ titlePrefix = '' }) {
       const updatedUser = (await usersApi.updateSettings({
         name: profileName.trim(),
         profile_picture_url: profilePicture || undefined,
-        email_notifications_enabled: emailEnabled,
-        whatsapp_notifications_enabled: whatsappEnabled,
       })).data
       setUser(updatedUser)
       window.localStorage.setItem('bridge_school_user', JSON.stringify(updatedUser))
       toast.success('Profile details updated')
     } catch (error) {
-      toast.error(error?.response?.data?.detail || 'Could not update profile')
+      toast.error(formatApiError(error, 'Could not update profile'))
     }
   }
 
-  const saveWhatsapp = async () => {
-    try {
-      const updatedUser = (await usersApi.updateSettings({ whatsapp_number: whatsappNumber })).data
-      setUser(updatedUser)
-      window.localStorage.setItem('bridge_school_user', JSON.stringify(updatedUser))
-      toast.success('WhatsApp number updated')
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || 'Could not update WhatsApp number')
-    }
-  }
-
-  const handleProfilePictureChange = (event) => {
+  const handleProfilePictureChange = async (event) => {
     const file = event.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setProfilePicture(reader.result)
-    reader.readAsDataURL(file)
-    toast.success('Profile picture ready to save')
+    try {
+      setProfilePicture(await prepareProfileImage(file))
+      toast.success('Profile picture cropped and optimized. Save profile to apply it.')
+    } catch (error) { toast.error(error.message || 'Could not prepare profile picture') }
   }
 
   const requestEmailChange = async (event) => {
@@ -2498,7 +2507,6 @@ export function SettingsView({ titlePrefix = '' }) {
     try {
       const updatedUser = (await usersApi.updateSettings({
         email_notifications_enabled: emailEnabled,
-        whatsapp_notifications_enabled: whatsappEnabled,
       })).data
       setUser(updatedUser)
       window.localStorage.setItem('bridge_school_user', JSON.stringify(updatedUser))
@@ -2536,9 +2544,10 @@ export function SettingsView({ titlePrefix = '' }) {
   return (
     <div>
       <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Settings`} subtitle="Manage your account, security, and preferences." />
+      <div className="mb-6 rounded-2xl bg-[var(--brand-navy)] p-6 text-white"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">Account settings</div><div className="mt-2 text-2xl font-semibold">Manage your profile, security, and preferences</div><div className="mt-1 text-sm text-white/70">Signed in as {user?.role || 'portal member'}.</div></div>
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="portal-panel">
-          <div className="text-sm font-medium text-[var(--text-primary)]">Profile Overview</div>
+        <div className="portal-panel lg:col-span-2">
+          <div className="text-sm font-semibold text-[var(--text-primary)]">Profile</div><p className="mt-1 text-sm text-[var(--text-secondary)]">Your profile image is automatically centre-cropped and optimized for use across the portal.</p>
           <div className="mt-4 flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-[var(--border-default)] bg-[var(--bg-app)] text-xl font-semibold text-[var(--brand-navy)]">
               {profilePicture || user?.profile_picture_url ? <img src={profilePicture || user?.profile_picture_url} alt="Profile preview" className="h-full w-full object-cover" /> : (user?.name || 'U').charAt(0).toUpperCase()}
@@ -2548,9 +2557,9 @@ export function SettingsView({ titlePrefix = '' }) {
               <div className="text-sm text-[var(--text-secondary)]">{user?.email || 'Update your email and security details below.'}</div>
             </div>
           </div>
-          <div className="mt-4 space-y-3">
-            <input className="portal-input" value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder="Display name" />
-            <input type="file" accept="image/*" className="portal-input" onChange={handleProfilePictureChange} />
+          <div className="mt-5 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <div><label className="portal-label block">Display name</label><input className="portal-input mt-1" value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder="Display name" /></div>
+            <div><label className="portal-label block">Profile picture</label><input type="file" accept="image/*" className="portal-input mt-1" onChange={handleProfilePictureChange} /></div>
             <button type="button" className="portal-button-primary" onClick={saveProfile}>Save profile</button>
           </div>
         </div>
@@ -2576,18 +2585,10 @@ export function SettingsView({ titlePrefix = '' }) {
           )}
         </div>
         <div className="portal-panel">
-          <div className="text-sm font-medium text-[var(--text-primary)]">Update WhatsApp Number</div>
-          <div className="mt-4 space-y-3">
-            <input className="portal-input" value={whatsappNumber} onChange={(event) => setWhatsappNumber(event.target.value)} placeholder="Phone number" />
-            <button type="button" className="portal-button-primary" onClick={saveWhatsapp}>Save</button>
-          </div>
-        </div>
-        <div className="portal-panel">
-          <div className="text-sm font-medium text-[var(--text-primary)]">Notification Preferences</div>
+          <div className="text-sm font-semibold text-[var(--text-primary)]">Notification Preferences</div><p className="mt-1 text-sm text-[var(--text-secondary)]">Choose how you receive portal updates.</p>
           <div className="mt-4 space-y-3 text-sm text-[var(--text-primary)]">
-            <label className="flex items-center gap-3"><input type="checkbox" checked={emailEnabled} onChange={(event) => setEmailEnabled(event.target.checked)} /> Email</label>
-            <label className="flex items-center gap-3"><input type="checkbox" checked={whatsappEnabled} onChange={(event) => setWhatsappEnabled(event.target.checked)} /> WhatsApp</label>
-            <button type="button" className="portal-button-primary" onClick={savePreferences}>Save</button>
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-default)] p-3"><span><span className="block font-medium">Email notifications</span><span className="text-xs text-[var(--text-muted)]">Meeting invitations, reminders, and important updates.</span></span><input type="checkbox" checked={emailEnabled} onChange={(event) => setEmailEnabled(event.target.checked)} /></label>
+            <button type="button" className="portal-button-primary" onClick={savePreferences}>Save preferences</button>
           </div>
         </div>
         <div className="portal-panel">

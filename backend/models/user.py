@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Enum as SQLEnum, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Enum as SQLEnum, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from ..database import Base
@@ -21,7 +21,9 @@ class User(Base):
     whatsapp_number = Column(String(32), nullable=True)
     department = Column(String(120), nullable=True, index=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    profile_picture_url = Column(String(4000), nullable=True)
+    # Profile images are stored as data URLs.  A VARCHAR column is too small for
+    # ordinary phone photos, even after client-side resizing.
+    profile_picture_url = Column(Text, nullable=True)
     email_notifications_enabled = Column(Boolean, default=True, nullable=False)
     whatsapp_notifications_enabled = Column(Boolean, default=True, nullable=False)
     pending_email = Column(String(255), nullable=True)

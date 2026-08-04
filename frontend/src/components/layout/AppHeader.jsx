@@ -42,8 +42,12 @@ export default function AppHeader({ onToggleSidebar, title }) {
           <Bell className="h-4 w-4" />
         </button>
         <button type="button" onClick={goToSettings} className="flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-white px-2 py-1.5 transition hover:bg-[var(--bg-app)]" aria-label="Open profile settings">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand-red)] font-display text-xs font-bold text-white">
-            {initials}
+          <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-[var(--brand-red)] font-display text-xs font-bold text-white">
+            {user?.profile_picture_url ? (
+              <img src={user.profile_picture_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              initials
+            )}
           </div>
           <span className="hidden text-sm text-[var(--text-primary)] sm:inline">{user?.name}</span>
           <Settings className="mr-1 h-4 w-4 text-[var(--text-muted)]" />

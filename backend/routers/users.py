@@ -436,7 +436,10 @@ def update_my_settings(payload: UserUpdateSettings, db: Session = Depends(get_db
         current_user.whatsapp_number = payload.whatsapp_number or None
     if payload.profile_picture_url is not None:
         picture_url = payload.profile_picture_url or None
-        if picture_url is not None and len(picture_url) > 4000:
+        # The browser sends an image data URL.  Keep a practical upper bound so
+        # a mistaken upload cannot fill the database, while allowing normal
+        # profile photos (and clients that do not pre-compress them).
+        if picture_url is not None and len(picture_url) > 5_000_000:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Profile picture is too large to save')
         current_user.profile_picture_url = picture_url
     if payload.email_notifications_enabled is not None:

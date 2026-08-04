@@ -64,15 +64,16 @@ export default function UserSearchSelect({
     })
   }, [eligibleUsers, query, multiple, selectedIds])
 
-  // Close dropdown on click outside
+  // Use capture so this also works inside modal dialogs, whose content stops
+  // bubbling mouse events to prevent the modal itself from closing.
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (containerRef.current && !containerRef.current.contains(event.target)) {
         setIsOpen(false)
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('pointerdown', handleClickOutside, true)
+    return () => document.removeEventListener('pointerdown', handleClickOutside, true)
   }, [])
 
   const handleSelectUser = (user) => {

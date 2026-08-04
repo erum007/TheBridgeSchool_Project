@@ -9,7 +9,7 @@ def apply_additive_schema_updates(engine) -> None:
     additions = {
         'users': {
             'department': 'VARCHAR(120) NULL',
-            'profile_picture_url': 'VARCHAR(4000) NULL',
+            'profile_picture_url': 'MEDIUMTEXT NULL',
             'email_notifications_enabled': 'BOOLEAN NOT NULL DEFAULT TRUE',
             'whatsapp_notifications_enabled': 'BOOLEAN NOT NULL DEFAULT TRUE',
             'pending_email': 'VARCHAR(255) NULL',
@@ -49,6 +49,9 @@ def apply_additive_schema_updates(engine) -> None:
                     connection.execute(text(f'ALTER TABLE `{table_name}` ADD COLUMN `{column_name}` {definition}'))
         if 'users' in inspector.get_table_names() and engine.dialect.name in {'mysql', 'mariadb'}:
             connection.execute(text("ALTER TABLE `users` MODIFY COLUMN `role` ENUM('admin','teacher','staff','student','parent') NOT NULL"))
+            # Earlier releases created this as VARCHAR(4000); some installations
+            # have an even older, shorter VARCHAR.  Both reject valid data URLs.
+            connection.execute(text('ALTER TABLE `users` MODIFY COLUMN `profile_picture_url` MEDIUMTEXT NULL'))
         _migrate_notice_schema(connection, inspector)
         _migrate_whatsapp_action_item_reminders(connection, inspector)
 
