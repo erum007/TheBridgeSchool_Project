@@ -67,9 +67,10 @@ import FileUploadZone from '../components/shared/FileUploadZone.jsx'
 import KanbanBoard from '../components/shared/KanbanBoard.jsx'
 import Modal from '../components/shared/Modal.jsx'
 import PageHeader from '../components/shared/PageHeader.jsx'
+import Table from '../components/shared/Table.jsx'
 import StatCard from '../components/shared/StatCard.jsx'
 import Tabs from '../components/shared/Tabs.jsx'
-import Table from '../components/shared/Table.jsx'
+import { SkeletonCardGrid, SkeletonStatGrid, SkeletonTable, SkeletonList, TopProgressBar } from '../components/shared/Skeleton.jsx'
 import CreateMeetingModal from '../components/shared/CreateMeetingModal.jsx'
 import UserSearchSelect from '../components/shared/UserSearchSelect.jsx'
 import RecipientSearchSelect from '../components/shared/RecipientSearchSelect.jsx'
@@ -567,7 +568,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
 
 export function EmailModuleView() {
   const { data: emails = [], loading: emailsLoading, refetch: refetchEmails } = useApi(() => emailsApi.list(), [])
-  const { data: templates = [], refetch: refetchTemplates } = useApi(() => emailsApi.templates(), [])
+  const { data: templates = [], loading: templatesLoading, refetch: refetchTemplates } = useApi(() => emailsApi.templates(), [])
   const [tab, setTab] = useState('dashboard')
   const emptyCompose = { recipient_group: 'parents', individual_emails: '', template_id: '', subject: '', preheader: '', body: '', scheduled_at: '', attachments: [] }
   const emptyTemplate = { name: '', subject: '', preheader: '', body: '', attachments: [], category: '', tags: [], is_favorite: false, publication_status: 'published' }
@@ -1170,7 +1171,7 @@ export function EmailModuleView() {
               <div className="grid gap-6 lg:grid-cols-[minmax(0,9fr)_minmax(360px,11fr)]">
                 <input className="portal-input w-full" placeholder="Search templates…" value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} />
                 <select className="portal-input w-full" value={templateCategory} onChange={(event) => setTemplateCategory(event.target.value)}><option value="">All categories</option>{[...new Set(templates.map((item) => item.category).filter(Boolean))].map((category) => <option key={category}>{category}</option>)}</select>
-                <div className="min-w-0 max-w-full [&>div]:overflow-hidden"><Table data={filteredTemplates} loading={false} columns={[
+                <div className="min-w-0 max-w-full [&>div]:overflow-hidden"><Table data={filteredTemplates} loading={templatesLoading} columns={[
                   { key: 'name', label: 'Template Name' },
                   { key: 'subject', label: 'Subject' },
                   { key: 'actions', label: 'Actions', render: (row) => <div className="flex gap-1.5 whitespace-nowrap"><button type="button" className="portal-button-secondary px-3 py-2" onClick={() => { setEditingTemplateId(row.id); setTemplateForm({ name: row.name, subject: row.subject, preheader: row.preheader || '', body: row.body, attachments: row.attachments || [], category: row.category || '', tags: Array.isArray(row.tags) ? row.tags : [], is_favorite: row.is_favorite, publication_status: row.publication_status || 'published' }) }}>Edit</button><button type="button" onClick={() => setTemplatePendingDeletion(row)} className="portal-button-ghost px-2 py-2 text-[var(--brand-red)]">Delete</button></div> },
@@ -1329,7 +1330,7 @@ export function EmailModuleView() {
 
 export function PerformanceBroadcasterView() {
   const { user } = useAuth()
-  const { data: results = [], refetch } = useApi(() => resultsApi.list(), [])
+  const { data: results = [], loading: resultsLoading, refetch } = useApi(() => resultsApi.list(), [])
   const [form, setForm] = useState({ notify: true, file: null })
   const [pendingDeleteBatchId, setPendingDeleteBatchId] = useState(null)
   const [previewRows, setPreviewRows] = useState([])
@@ -1566,7 +1567,7 @@ export function PerformanceBroadcasterView() {
             {!filteredUploads.length && uploads.length ? (
               <div className="text-center py-6 text-xs text-[var(--text-muted)]">No uploads match the selected filters.</div>
             ) : null}
-            {!uploads.length ? <EmptyState title="No uploads yet" message="Broadcast result sheets to see recent batches here." /> : null}
+            {resultsLoading ? <SkeletonList count={3} /> : !uploads.length ? <EmptyState title="No uploads yet" message="Broadcast result sheets to see recent batches here." /> : null}
           </div>
         </div>
       </div>
@@ -1576,7 +1577,7 @@ export function PerformanceBroadcasterView() {
 
 export function WhatsAppAlertsView() {
   const { user } = useAuth()
-  const { data: logs = [], refetch } = useApi(() => whatsappApi.logs(), [])
+  const { data: logs = [], loading: logsLoading, refetch } = useApi(() => whatsappApi.logs(), [])
   const [connected, setConnected] = useState(true)
   const [form, setForm] = useState({ recipient_name: '', phone_number: '', message: '', recipient_group: 'parents' })
 
@@ -1671,10 +1672,10 @@ export function WhatsAppAlertsView() {
 }
 
 export function PortalManagementView() {
-  const { data: notices = [], refetch: refetchNotices } = useApi(() => noticesApi.list(), [])
-  const { data: opportunities = [], refetch: refetchOpportunities } = useApi(() => opportunitiesApi.list(), [])
-  const { data: users = [], refetch: refetchUsers } = useApi(() => usersApi.list(), [])
-  const { data: departments = [], refetch: refetchDepartments } = useApi(() => departmentsApi.list(), [])
+  const { data: notices = [], loading: noticesLoading, refetch: refetchNotices } = useApi(() => noticesApi.list(), [])
+  const { data: opportunities = [], loading: opportunitiesLoading, refetch: refetchOpportunities } = useApi(() => opportunitiesApi.list(), [])
+  const { data: users = [], loading: usersLoading, refetch: refetchUsers } = useApi(() => usersApi.list(), [])
+  const { data: departments = [], loading: departmentsLoading, refetch: refetchDepartments } = useApi(() => departmentsApi.list(), [])
   const [noticeForm, setNoticeForm] = useState({ title: '', body: '', recipient_roles: ['all'], recipient_department_ids: [], recipient_user_ids: [], status: 'published', publish_mode: 'now', publish_datetime: '' })
   const [opportunityForm, setOpportunityForm] = useState({ title: '', eligibility: '', deadline: '', link: '' })
   const [userForm, setUserForm] = useState({ name: '', email: '', role: '', password: '', department: '' })
@@ -1935,7 +1936,7 @@ export function PortalManagementView() {
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
                 <Table
                   data={notices}
-                  loading={false}
+                  loading={noticesLoading}
                   columns={[
                     { key: 'title', label: 'Title' },
                     { key: 'recipients', label: 'Recipients', render: (row) => <span className="text-sm text-[var(--text-secondary)]">{getNoticeRecipientSummary(row)}</span> },
@@ -2006,7 +2007,7 @@ export function PortalManagementView() {
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
                 <Table
                   data={opportunities}
-                  loading={false}
+                  loading={opportunitiesLoading}
                   columns={[
                     { key: 'title', label: 'Title' },
                     { key: 'eligibility', label: 'Eligibility' },
@@ -2065,7 +2066,7 @@ export function PortalManagementView() {
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
                 <Table
                   data={users}
-                  loading={false}
+                  loading={usersLoading}
                   columns={[
                     { key: 'name', label: 'Name' },
                     { key: 'email', label: 'Email' },
@@ -2151,7 +2152,7 @@ export function TeacherDashboardView() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const { data, loading, refetch } = useApi(() => dashboardApi.summary(), [])
-  const { data: actionItems = [] } = useApi(() => actionItemsApi.list(), [])
+  const { data: actionItems = [], loading: actionItemsLoading } = useApi(() => actionItemsApi.list(), [])
   const myTasks = actionItems.filter((item) => String(item.assigned_to) === String(user?.id))
 
   const updateTask = async (id, status) => {
@@ -2174,7 +2175,7 @@ export function TeacherDashboardView() {
       <div className="mt-6">
         <Table
           data={myTasks}
-          loading={false}
+          loading={actionItemsLoading}
           columns={[
             { key: 'description', label: 'Description' },
             { key: 'meeting', label: 'Meeting source', render: (row) => row.meeting_id ? `Meeting #${row.meeting_id}` : '—' },
@@ -2197,7 +2198,7 @@ export function StudentHomeView({ titlePrefix = '' }) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const { data: results = [], loading: resultsLoading } = useApi(() => resultsApi.list(), [])
-  const { data: notices = [] } = useApi(() => noticesApi.list(), [])
+  const { data: notices = [], loading: noticesLoading } = useApi(() => noticesApi.list(), [])
 
   const noticeHighlights = notices.slice(0, 2)
   const recentReports = results.slice(0, 4)
@@ -2291,9 +2292,10 @@ export function StudentHomeView({ titlePrefix = '' }) {
 
 export function StudentProgressView({ titlePrefix = '' }) {
   const { user } = useAuth()
-  const { data: results = [] } = useApi(() => resultsApi.list(), [])
+  const { data: results = [], loading: resultsLoading } = useApi(() => resultsApi.list(), [])
   const chartData = useMemo(() => results.map((result) => ({ subject: result.subject, mine: result.grade, average: result.class_average })), [results])
-
+  
+  if (resultsLoading) return <><TopProgressBar /><div className="portal-panel"><div className="h-80 w-full skeleton-shimmer" /></div></>
   if (!results.length) {
     return <EmptyState icon={ChartColumnBig} title="No performance data yet" message="Results will appear here once they are released." />
   }
@@ -2330,7 +2332,7 @@ export function StudentProgressView({ titlePrefix = '' }) {
 
 export function StudentResultHistoryView({ titlePrefix = '' }) {
   const { user } = useAuth()
-  const { data: results = [] } = useApi(() => resultsApi.list(), [])
+  const { data: results = [], loading: resultsLoading } = useApi(() => resultsApi.list(), [])
   const heading = user?.role === 'parent' ? `${parentChildPrefix(user) || 'Child '}Results` : titlePrefix ? "Your Child's Results" : 'My Results'
 
   return (
@@ -2373,22 +2375,24 @@ export function StudentResultHistoryView({ titlePrefix = '' }) {
             </tbody>
           </table>
         </div>
-      ) : (
+      ) : !resultsLoading ? (
         <EmptyState icon={BookOpen} title="No results published yet. Check back after your teacher uploads your report." />
-      )}
+      ) : null}
     </div>
   )
 }
 
 export function NoticeBoardView({ titlePrefix = '' }) {
   const { user } = useAuth()
-  const { data: notices = [] } = useApi(() => noticesApi.list(), [])
+  const { data: notices = [], loading: noticesLoading } = useApi(() => noticesApi.list(), [])
   const [openNotice, setOpenNotice] = useState(null)
 
   return (
     <div>
       <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Notice Board`} subtitle="Read recent notices and announcements." />
-      {notices.length === 0 ? (
+      {noticesLoading ? (
+        <SkeletonCardGrid count={4} />
+      ) : notices.length === 0 ? (
         <EmptyState icon={FileText} title="No notices yet" />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -2415,7 +2419,7 @@ export function NoticeBoardView({ titlePrefix = '' }) {
 
 export function OpportunityBoardView({ titlePrefix = '' }) {
   const { user } = useAuth()
-  const { data: opportunities = [] } = useApi(() => opportunitiesApi.list(), [])
+  const { data: opportunities = [], loading: opportunitiesLoading } = useApi(() => opportunitiesApi.list(), [])
 
   return (
     <div>

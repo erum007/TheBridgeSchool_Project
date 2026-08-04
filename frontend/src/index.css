@@ -378,3 +378,36 @@ input[type='checkbox'] {
 .email-preview-content .ql-image-align-right[data-title]::after {
   text-align: right;
 }
+
+.animate-pulse {
+  animation-duration: 1.8s !important;
+}
+
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #c8cde0 0%, #e8eaf5 40%, #f5f6ff 50%, #e8eaf5 60%, #c8cde0 100%);
+  background-size: 1000px 100%;
+  animation: shimmer 1.2s infinite linear;
+  border-radius: 6px;
+}
+
+@keyframes progress-bar {
+  0% { width: 0%; opacity: 1; }
+  80% { width: 90%; opacity: 1; }
+  100% { width: 100%; opacity: 0; }
+}
+
+.top-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: #c62828;
+  animation: progress-bar 1.5s ease-out forwards;
+  z-index: 9999;
+  border-radius: 0 2px 2px 0;
+}
