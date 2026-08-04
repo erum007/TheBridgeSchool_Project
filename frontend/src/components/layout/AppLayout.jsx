@@ -35,6 +35,7 @@ const teacherNav = [
 const staffNav = [
   { label: 'Staff', items: [
     { to: '/staff/dashboard', label: 'Dashboard', icon: Shield },
+    { to: '/staff/meetings', label: 'Meetings & Actions', icon: CalendarDays },
     { to: '/staff/notices', label: 'Notice Board', icon: FileText },
     { to: '/staff/settings', label: 'Settings', icon: Users },
   ] },

@@ -44,7 +44,7 @@ import {
 } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { toast } from 'react-hot-toast'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../context/AuthContext.jsx'
 import { useApi } from '../hooks/useApi.js'
@@ -157,9 +157,9 @@ export function AdminDashboardView() {
     <div>
       <PageHeader title="Dashboard" subtitle={`Good morning, ${user?.name || 'Administrator'}`} action={{ label: 'New Meeting', icon: CirclePlus, onClick: () => setCreateOpen(true) }} />
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard title="Pending Actions" value={data?.pending_actions ?? 0} subtitle="Tasks awaiting action" icon={Sparkles} loading={loading} />
-        <StatCard title="Scheduled Emails" value={data?.scheduled_emails ?? 0} subtitle="Queued communication" icon={Send} loading={loading} />
-        <StatCard title="Overdue Tasks" value={data?.overdue_tasks ?? 0} subtitle="Needs attention" icon={CalendarDays} loading={loading} />
+        <StatCard title="Pending Actions" value={data?.pending_actions ?? 0} subtitle="Tasks awaiting action" icon={Sparkles} loading={loading} onClick={() => navigate('/admin/meetings?tab=board')} />
+        <StatCard title="Scheduled Emails" value={data?.scheduled_emails ?? 0} subtitle="Queued communication" icon={Send} loading={loading} onClick={() => navigate('/admin/email')} />
+        <StatCard title="Overdue Tasks" value={data?.overdue_tasks ?? 0} subtitle="Needs attention" icon={CalendarDays} loading={loading} onClick={() => navigate('/admin/meetings?tab=board')} />
       </div>
       <div className="mt-6 flex gap-3">
         <button type="button" className="portal-button-primary" onClick={() => setCreateOpen(true)}>New Meeting</button>
@@ -171,6 +171,7 @@ export function AdminDashboardView() {
 }
 
 export function MeetingWorkspaceView({ canCreateMeeting }) {
+  const [searchParams] = useSearchParams()
   const { data: meetings = [], loading: meetingsLoading, error: meetingsError, refetch: refetchMeetings } = useApi(() => meetingsApi.list(), [])
   const { data: actionItems = [], error: actionItemsError, refetch: refetchActions } = useApi(() => actionItemsApi.list(), [])
   const { data: users = [], error: usersError } = useApi(() => usersApi.list(), [])
@@ -187,7 +188,8 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   const [keyDecisions, setKeyDecisions] = useState([])
   const [generatedActionItems, setGeneratedActionItems] = useState([])
   const [assigneeFilter, setAssigneeFilter] = useState('all')
-  const [workspaceTab, setWorkspaceTab] = useState('meetings')
+  const initialWorkspaceTab = searchParams.get('tab')
+  const [workspaceTab, setWorkspaceTab] = useState(['meetings', 'past', 'board'].includes(initialWorkspaceTab) ? initialWorkspaceTab : 'meetings')
   const [actionForm, setActionForm] = useState({ meeting_id: '', description: '', assigned_to: '', due_date: '', email_reminder_frequency: 'none', email_reminder_at: '' })
   const [assigneeSearch, setAssigneeSearch] = useState('')
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
@@ -518,7 +520,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                   </div>
                 </div>
                 <KanbanBoard columns={boardColumns} onStatusChange={changeActionStatus} pendingStatusItemIds={pendingActionStatusIds} onSendReminderNow={sendReminderNow} pendingReminderIds={pendingReminderIds} cooldownReminderIds={cooldownReminderIds} />
-                <form className="grid gap-4 portal-panel lg:grid-cols-4" onSubmit={createActionItem}>
+                {canCreateMeeting ? <form className="grid gap-4 portal-panel lg:grid-cols-4" onSubmit={createActionItem}>
                   <select className="portal-input" value={actionForm.meeting_id} onChange={(event) => setActionForm({ ...actionForm, meeting_id: event.target.value })}>
                     <option value="">Select meeting</option>
                     {meetings.map((meeting) => <option key={meeting.id} value={meeting.id}>{meeting.title}</option>)}
@@ -552,7 +554,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                   {actionForm.email_reminder_frequency !== 'none' ? (
                     <p className="lg:col-span-2 text-xs text-[var(--text-muted)]">Reminders are sent to the assignee&apos;s registered email address and stop once the action item is marked done.</p>
                   ) : null}
-                </form>
+                </form> : null}
               </div>
             ),
           },
@@ -2147,6 +2149,7 @@ export function PortalManagementView() {
 
 export function TeacherDashboardView() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const { data, loading, refetch } = useApi(() => dashboardApi.summary(), [])
   const { data: actionItems = [] } = useApi(() => actionItemsApi.list(), [])
   const myTasks = actionItems.filter((item) => String(item.assigned_to) === String(user?.id))
@@ -2165,8 +2168,8 @@ export function TeacherDashboardView() {
     <div>
       <PageHeader title="Teacher Dashboard" subtitle="Your tasks and schedule at a glance." />
       <div className="grid gap-4 md:grid-cols-2">
-        <StatCard title="Assigned Actions" value={data?.pending_actions ?? 0} subtitle="Tasks waiting on you" icon={Sparkles} loading={loading} />
-        <StatCard title="Upcoming Meetings" value={data?.upcoming_meetings ?? 0} subtitle="Your meetings this term" icon={CalendarDays} loading={loading} />
+        <StatCard title="Assigned Actions" value={data?.pending_actions ?? 0} subtitle="Tasks waiting on you" icon={Sparkles} loading={loading} onClick={() => navigate(`/${user?.role === 'staff' ? 'staff' : 'teacher'}/meetings?tab=board`)} />
+        <StatCard title="Upcoming Meetings" value={data?.upcoming_meetings ?? 0} subtitle="Your meetings this term" icon={CalendarDays} loading={loading} onClick={() => navigate(`/${user?.role === 'staff' ? 'staff' : 'teacher'}/meetings?tab=meetings`)} />
       </div>
       <div className="mt-6">
         <Table
@@ -2192,18 +2195,27 @@ export function TeacherDashboardView() {
 
 export function StudentHomeView({ titlePrefix = '' }) {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const { data: results = [], loading: resultsLoading } = useApi(() => resultsApi.list(), [])
   const { data: notices = [] } = useApi(() => noticesApi.list(), [])
 
   const noticeHighlights = notices.slice(0, 2)
   const recentReports = results.slice(0, 4)
   const resultsHeading = titlePrefix ? "Your Child's Results" : 'My Results'
+  const portalPath = user?.role === 'parent' ? '/parent' : '/student'
+  const openResults = () => navigate(`${portalPath}/results`)
+  const openResultsFromKeyboard = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      openResults()
+    }
+  }
 
   return (
     <div>
       <PageHeader title={`${titlePrefix || parentChildPrefix(user)}${user?.role === 'parent' ? '' : user?.name ? `${user.name}'s ` : 'Welcome back, '}Home`} subtitle={format(new Date(), 'EEEE, d MMMM yyyy')} />
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="portal-panel">
+        <div role="link" tabIndex={0} aria-label={`Open ${resultsHeading}`} onClick={openResults} onKeyDown={openResultsFromKeyboard} className="portal-panel cursor-pointer transition hover:border-[var(--brand-blue)] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30">
           <div className="mb-3 text-sm font-medium text-[var(--text-primary)]">{resultsHeading}</div>
           {resultsLoading ? (
             <div className="text-sm text-[var(--text-secondary)]">Loading results...</div>
@@ -2249,7 +2261,7 @@ export function StudentHomeView({ titlePrefix = '' }) {
           )}
         </div>
         <div className="space-y-4">
-          <div className="portal-panel">
+          <button type="button" onClick={openResults} className="portal-panel w-full text-left transition hover:border-[var(--brand-blue)] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30">
             <div className="mb-3 text-sm font-medium text-[var(--text-primary)]">Recent Performance Reports</div>
             <div className="space-y-3">
               {recentReports.map((result) => (
@@ -2259,8 +2271,8 @@ export function StudentHomeView({ titlePrefix = '' }) {
                 </div>
               ))}
             </div>
-          </div>
-          <div className="portal-panel">
+          </button>
+          <button type="button" onClick={() => navigate(`${portalPath}/notices`)} className="portal-panel w-full text-left transition hover:border-[var(--brand-blue)] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30">
             <div className="mb-3 text-sm font-medium text-[var(--text-primary)]">Quick Notices</div>
             <div className="space-y-3">
               {noticeHighlights.map((notice) => (
@@ -2270,7 +2282,7 @@ export function StudentHomeView({ titlePrefix = '' }) {
                 </div>
               ))}
             </div>
-          </div>
+          </button>
         </div>
       </div>
     </div>
