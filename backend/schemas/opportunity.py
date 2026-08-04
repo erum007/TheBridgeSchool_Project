@@ -1,15 +1,25 @@
 from __future__ import annotations
 
-from typing import Optional
+from datetime import date
+
+from pydantic import Field, field_validator
 
 from .common import ORMBaseModel
 
 
 class OpportunityCreate(ORMBaseModel):
-    title: str
-    eligibility: str
-    deadline: Optional[str] = None
-    link: Optional[str] = None
+    title: str = Field(min_length=1)
+    eligibility: str = Field(min_length=1)
+    deadline: date
+    link: str = Field(min_length=1)
+
+    @field_validator('title', 'eligibility', 'link')
+    @classmethod
+    def required_values_cannot_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError('This field is required')
+        return value
 
 
 class OpportunityRead(ORMBaseModel):

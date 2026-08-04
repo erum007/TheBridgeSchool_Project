@@ -52,6 +52,22 @@ def apply_additive_schema_updates(engine) -> None:
             # Earlier releases created this as VARCHAR(4000); some installations
             # have an even older, shorter VARCHAR.  Both reject valid data URLs.
             connection.execute(text('ALTER TABLE `users` MODIFY COLUMN `profile_picture_url` MEDIUMTEXT NULL'))
+        if 'opportunities' in inspector.get_table_names():
+            # Opportunities without any of their public-facing details are not
+            # useful listings. Remove legacy incomplete rows before applying the
+            # stricter database constraint below.
+            connection.execute(text(
+                "DELETE FROM `opportunities` "
+                "WHERE `title` IS NULL OR TRIM(`title`) = '' "
+                "OR `eligibility` IS NULL OR TRIM(`eligibility`) = '' "
+                "OR `deadline` IS NULL OR `link` IS NULL OR TRIM(`link`) = ''"
+            ))
+            if engine.dialect.name in {'mysql', 'mariadb'}:
+                connection.execute(text(
+                    'ALTER TABLE `opportunities` '
+                    'MODIFY COLUMN `deadline` DATE NOT NULL, '
+                    'MODIFY COLUMN `link` VARCHAR(500) NOT NULL'
+                ))
         _migrate_notice_schema(connection, inspector)
         _migrate_whatsapp_action_item_reminders(connection, inspector)
 

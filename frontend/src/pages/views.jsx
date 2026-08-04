@@ -1745,7 +1745,11 @@ export function PortalManagementView() {
 
   const submitOpportunity = async (event) => {
     event.preventDefault()
-    if (opportunityForm.deadline && opportunityForm.deadline < todayInputValue()) {
+    if (!opportunityForm.title.trim() || !opportunityForm.eligibility.trim() || !opportunityForm.deadline || !opportunityForm.link.trim()) {
+      toast.error('Please fill in every opportunity field')
+      return
+    }
+    if (opportunityForm.deadline < todayInputValue()) {
       toast.error('Deadline cannot be in the past')
       return
     }
@@ -2011,20 +2015,20 @@ export function PortalManagementView() {
                 />
                 <form className="space-y-4 portal-panel" onSubmit={submitOpportunity}>
                   <div>
-                    <label className="portal-label block">Title</label>
-                    <input className="portal-input mt-1" value={opportunityForm.title} onChange={(event) => setOpportunityForm({ ...opportunityForm, title: event.target.value })} />
+                    <label className="portal-label block">Title <span className="text-[var(--brand-red)]">*</span></label>
+                    <input required className="portal-input mt-1" value={opportunityForm.title} onChange={(event) => setOpportunityForm({ ...opportunityForm, title: event.target.value })} />
                   </div>
                   <div>
-                    <label className="portal-label block">Eligibility</label>
-                    <input className="portal-input mt-1" value={opportunityForm.eligibility} onChange={(event) => setOpportunityForm({ ...opportunityForm, eligibility: event.target.value })} />
+                    <label className="portal-label block">Eligibility <span className="text-[var(--brand-red)]">*</span></label>
+                    <input required className="portal-input mt-1" value={opportunityForm.eligibility} onChange={(event) => setOpportunityForm({ ...opportunityForm, eligibility: event.target.value })} />
                   </div>
                   <div>
-                    <label className="portal-label block">Deadline</label>
-                    <input type="date" min={todayInputValue()} className="portal-input mt-1" value={opportunityForm.deadline} onChange={(event) => setOpportunityForm({ ...opportunityForm, deadline: event.target.value })} />
+                    <label className="portal-label block">Deadline <span className="text-[var(--brand-red)]">*</span></label>
+                    <input required type="date" min={todayInputValue()} className="portal-input mt-1" value={opportunityForm.deadline} onChange={(event) => setOpportunityForm({ ...opportunityForm, deadline: event.target.value })} />
                   </div>
                   <div>
-                    <label className="portal-label block">Link</label>
-                    <input className="portal-input mt-1" value={opportunityForm.link} onChange={(event) => setOpportunityForm({ ...opportunityForm, link: event.target.value })} />
+                    <label className="portal-label block">Link <span className="text-[var(--brand-red)]">*</span></label>
+                    <input required type="url" className="portal-input mt-1" value={opportunityForm.link} onChange={(event) => setOpportunityForm({ ...opportunityForm, link: event.target.value })} />
                   </div>
                   <button type="submit" className="portal-button-primary">Create Opportunity</button>
                 </form>

@@ -14,8 +14,8 @@ class Opportunity(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
     eligibility = Column(String(255), nullable=False)
-    deadline = Column(Date, nullable=True)
-    link = Column(String(500), nullable=True)
+    deadline = Column(Date, nullable=False)
+    link = Column(String(500), nullable=False)
     created_by = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
