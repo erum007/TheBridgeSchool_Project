@@ -4,6 +4,7 @@ from .department import DepartmentCreate, DepartmentMemberUpdate
 from .email import EmailSendRequest, EmailTemplateCreate, EmailTemplateRead, ScheduledEmailCreate, ScheduledEmailRead, TestEmailRequest
 from .meeting import MeetingCreate, MeetingRead, MeetingTranscriptRequest, MeetingUpdate
 from .notice import NoticeCreate, NoticeRead, NoticeUpdate
+from .notification import NotificationRead
 from .opportunity import OpportunityCreate, OpportunityRead
 from .result import ResultRead
 from .user import GuardianRegistration, ParentLinkCreate, StudentRegistration, TeacherLinkCreate, UserAdminUpdate, UserCreate, UserRead, UserUpdateSettings

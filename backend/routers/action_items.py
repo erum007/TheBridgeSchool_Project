@@ -9,6 +9,7 @@ from ..dependencies import get_current_user, get_db, require_roles
 from ..models import ActionItem, ActionItemEmailReminder, ActionItemStatus, User, UserRole
 from ..schemas import ActionItemCreate, ActionItemUpdate
 from ..services.action_item_email_reminder_service import VALID_FREQUENCIES, cancel_reminder, parse_run_at, schedule_reminder, send_manual_reminder
+from ..services.notification_service import create_notification, notification_link
 from ..services.serialization import serialize_action_item
 
 
@@ -69,7 +70,7 @@ def create_action_item(payload: ActionItemCreate, db: Session = Depends(get_db),
     due_date = date.fromisoformat(payload.due_date) if payload.due_date else None
     if due_date and due_date < date.today():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Due date cannot be in the past')
-    _validate_assignee(db, payload.assigned_to)
+    assignee = _validate_assignee(db, payload.assigned_to)
     action_item = ActionItem(
         meeting_id=payload.meeting_id,
         description=payload.description,
@@ -77,6 +78,14 @@ def create_action_item(payload: ActionItemCreate, db: Session = Depends(get_db),
         due_date=due_date,
     )
     db.add(action_item)
+    create_notification(
+        db,
+        assignee.id,
+        'New action item assigned',
+        f'You have been assigned: {action_item.description}',
+        'action_item',
+        notification_link(assignee.role, '/meetings?tab=board'),
+    )
     db.commit()
     db.refresh(action_item)
     _set_email_reminder(action_item, payload.email_reminder_frequency, payload.email_reminder_at, current_user.id, db)

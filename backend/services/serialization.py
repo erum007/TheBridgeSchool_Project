@@ -47,6 +47,18 @@ def serialize_user(user):
     }
 
 
+def serialize_notification(notification):
+    return {
+        'id': notification.id,
+        'title': notification.title,
+        'body': notification.body,
+        'notification_type': notification.notification_type,
+        'link': notification.link,
+        'is_read': notification.is_read,
+        'created_at': iso(notification.created_at),
+    }
+
+
 def serialize_action_item(action_item):
     reminder = getattr(action_item, 'email_reminder', None)
     return {

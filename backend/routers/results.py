@@ -12,6 +12,7 @@ from ..dependencies import get_current_user, get_db
 from ..models import Result, User, UserRole
 from ..services.results_service import parse_results_upload, send_performance_report_emails
 from ..services.serialization import serialize_result
+from ..services.notification_service import create_notification, notification_link
 
 
 router = APIRouter(prefix='/api/results', tags=['results'])
@@ -59,6 +60,23 @@ async def upload_results(
         )
         db.add(result)
         created.append(result)
+        create_notification(
+            db,
+            student.id,
+            'New result published',
+            f'{result.subject} results for {result.term} are now available.',
+            'result',
+            notification_link(student.role, '/results'),
+        )
+        for guardian in student.guardians:
+            create_notification(
+                db,
+                guardian.id,
+                'New student result published',
+                f'{student.name}’s {result.subject} results for {result.term} are now available.',
+                'result',
+                notification_link(guardian.role, '/results'),
+            )
     db.commit()
     for result in created:
         db.refresh(result)

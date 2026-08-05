@@ -9,6 +9,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from ..database import SessionLocal
 from ..models import ActionItem, ActionItemEmailReminder, ActionItemStatus, User
 from .email_service import send_plain_email
+from .notification_service import create_notification, notification_link
 from .scheduler_service import ensure_scheduler_started, scheduler
 
 
@@ -117,6 +118,17 @@ def _deliver_reminder_from_action_item(db, action_item, reminder=None, reminder_
     if not assignee or not getattr(assignee, 'email', None):
         logger.warning('Skipping reminder %s because assignee %s has no email address', reminder_id, action_item.assigned_to)
         return False, 'Assignee has no email address.'
+
+    create_notification(
+        db,
+        assignee.id,
+        'Action item reminder',
+        f'Reminder: {action_item.description}',
+        'action_reminder',
+        notification_link(assignee.role, '/meetings?tab=board'),
+    )
+    # In-app reminders are delivered independently of email availability.
+    db.commit()
 
     subject, body, html_body = _build_reminder_email(
         assignee.name,

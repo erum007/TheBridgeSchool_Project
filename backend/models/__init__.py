@@ -19,6 +19,7 @@ from .department import Department
 from .email_template import EmailTemplate
 from .meeting import Meeting
 from .notice import Notice
+from .notification import Notification
 from .opportunity import Opportunity
 from .result import Result
 from .scheduled_email import ScheduledEmail

@@ -8,6 +8,7 @@ from ..dependencies import get_current_user, get_db, require_roles
 from ..models import Opportunity, User, UserRole
 from ..schemas import OpportunityCreate
 from ..services.serialization import serialize_opportunity
+from ..services.notification_service import create_notification, notification_link
 
 
 router = APIRouter(prefix='/api/opportunities', tags=['opportunities'])
@@ -32,6 +33,15 @@ def create_opportunity(payload: OpportunityCreate, db: Session = Depends(get_db)
         created_by=current_user.id,
     )
     db.add(opportunity)
+    for recipient in db.query(User).filter(User.is_active == True, User.role.in_([UserRole.student, UserRole.parent])).all():
+        create_notification(
+            db,
+            recipient.id,
+            'New opportunity available',
+            opportunity.title,
+            'opportunity',
+            notification_link(recipient.role, '/opportunities'),
+        )
     db.commit()
     db.refresh(opportunity)
     opportunity = db.query(Opportunity).options(selectinload(Opportunity.created_by_user)).filter(Opportunity.id == opportunity.id).first()

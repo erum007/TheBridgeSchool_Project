@@ -10,6 +10,7 @@ from ..dependencies import get_current_user, get_db, require_roles
 from ..models import Department, Notice, NoticeStatus, User, UserRole
 from ..schemas import NoticeCreate, NoticeUpdate
 from ..services.serialization import serialize_notice
+from ..services.notification_service import create_notification, notification_link
 
 
 router = APIRouter(prefix='/api/notices', tags=['notices'])
@@ -19,14 +20,14 @@ def _user_matches_notice(user: User, notice: Notice) -> bool:
     """Return True if this user is allowed to see the notice."""
     roles = notice.recipient_roles or []
     dept_ids = {d.id for d in (notice.recipient_departments or [])}
-    user_ids = {u.id for u in (notice.recipient_users or [])}
+    user_ids = {u.id for u in (getattr(notice, 'recipient_users', None) or [])}
 
     # Admin always sees everything
     if user.role == UserRole.admin:
         return True
 
     # Check if specifically included as a user
-    if user.id in user_ids:
+    if getattr(user, 'id', None) in user_ids:
         return True
 
     # If recipient_roles is empty and no departments and no users → treat as 'all'
@@ -182,6 +183,20 @@ def create_notice(
     notice.recipient_departments = departments
     notice.recipient_users = users
     db.add(notice)
+    is_published_now = notice.status == NoticeStatus.published and (
+        pub_dt is None or pub_dt <= datetime.now(timezone.utc)
+    )
+    if is_published_now:
+        for recipient in db.query(User).filter(User.is_active == True).all():
+            if recipient.id != current_user.id and _user_matches_notice(recipient, notice):
+                create_notification(
+                    db,
+                    recipient.id,
+                    'New notice published',
+                    notice.title,
+                    'notice',
+                    notification_link(recipient.role, '/notices'),
+                )
     db.commit()
     db.refresh(notice)
     notice = _notice_query(db).filter(Notice.id == notice.id).first()

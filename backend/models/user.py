@@ -44,6 +44,7 @@ class User(Base):
     whatsapp_logs_sent = relationship('WhatsAppLog', back_populates='sent_by_user', foreign_keys='WhatsAppLog.sent_by')
     email_templates_created = relationship('EmailTemplate', back_populates='created_by_user', foreign_keys='EmailTemplate.created_by')
     scheduled_emails_created = relationship('ScheduledEmail', back_populates='created_by_user', foreign_keys='ScheduledEmail.created_by')
+    notifications = relationship('Notification', back_populates='recipient', cascade='all, delete-orphan')
     children = relationship(
         'User',
         secondary=parent_student_links,

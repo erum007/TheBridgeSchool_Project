@@ -11,6 +11,7 @@ from ..dependencies import get_current_user, get_db, require_roles
 from ..models import ActionItem, Department, Meeting, MeetingStatus, User, UserRole
 from ..schemas import MeetingCreate, MeetingUpdate
 from ..services.email_service import send_plain_email
+from ..services.notification_service import create_notification, notification_link
 from ..services.serialization import serialize_meeting
 
 
@@ -144,6 +145,16 @@ def create_meeting(payload: MeetingCreate, db: Session = Depends(get_db), curren
     )
     meeting.attendees = attendees
     db.add(meeting)
+    for attendee in attendees:
+        if attendee.id != current_user.id:
+            create_notification(
+                db,
+                attendee.id,
+                'New meeting invitation',
+                f'You are invited to “{meeting.title}” on {scheduled_at.strftime("%d %b %Y at %I:%M %p")}.',
+                'meeting',
+                notification_link(attendee.role, '/meetings?tab=meetings'),
+            )
     db.commit()
     db.refresh(meeting)
     invitations_sent, invitations_failed = _send_meeting_invites(meeting, attendees, external_emails)
