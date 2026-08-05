@@ -1682,6 +1682,8 @@ export function PortalManagementView() {
   const [guardians, setGuardians] = useState([{ name: '', email: '' }])
   const [selectedUser, setSelectedUser] = useState(null)
   const [importFile, setImportFile] = useState(null)
+  const [importType, setImportType] = useState('students')
+  const [importErrors, setImportErrors] = useState([])
   const [parentToLink, setParentToLink] = useState('')
   const [userPendingDeletion, setUserPendingDeletion] = useState(null)
   const [departmentName, setDepartmentName] = useState('')
@@ -1817,13 +1819,16 @@ export function PortalManagementView() {
   const importUsers = async (event) => {
     event.preventDefault()
     if (!importFile) return toast.error('Choose an Excel file first')
+    setImportErrors([])
     try {
-      const response = await usersApi.import(importFile)
-      toast.success(`${response.data.accounts_created} account(s) created. Credential emails are being sent.`)
+      const response = await usersApi.import(importFile, importType)
+      toast.success(response.data.message || `${response.data.accounts_created} account(s) created. Credential emails are being sent.`)
       setImportFile(null)
       refetchUsers()
       refetchDepartments()
     } catch (error) {
+      const detail = error?.response?.data?.detail
+      if (detail?.errors) setImportErrors(detail.errors)
       toast.error(formatApiError(error, 'Could not import users'))
     }
   }
@@ -2122,12 +2127,19 @@ export function PortalManagementView() {
                   </div>
                   <button type="submit" className="portal-button-primary">{userForm.role === 'student' ? 'Register Student & Guardian' : 'Add User'}</button>
                 </form>
-                <form className="space-y-3 portal-panel" onSubmit={importUsers}>
-                  <div className="font-medium text-[var(--text-primary)]">Import users from Excel</div>
-                  <p className="text-xs text-[var(--text-muted)]">Required: <code>name, email, role, password</code>. Staff also need <code>department</code>. Students need <code>guardian_1_name, guardian_1_email</code>; optional second guardian: <code>guardian_2_name, guardian_2_email</code>.</p>
-                  <div className="flex flex-wrap gap-2 text-sm"><a className="portal-button-ghost" href={`${import.meta.env.VITE_API_BASE_URL || ''}/api/users/templates/standard-users.xlsx`}>Download standard-user template</a><a className="portal-button-ghost" href={`${import.meta.env.VITE_API_BASE_URL || ''}/api/users/templates/students.xlsx`}>Download student/guardian template</a></div>
-                  <input type="file" accept=".xlsx,.xls" className="portal-input" onChange={(event) => setImportFile(event.target.files?.[0] || null)} />
-                  <button className="portal-button-secondary">Validate & Import</button>
+                <form className="space-y-4 portal-panel lg:col-span-2" onSubmit={importUsers}>
+                  <div><div className="font-semibold text-[var(--text-primary)]">Import users from Excel</div><p className="mt-1 text-sm text-[var(--text-secondary)]">Choose the correct template, complete it, and import the whole batch safely. No account is created until every row passes validation.</p></div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {[
+                      { id: 'students', title: 'Students & Guardians', description: 'Creates each student and links one or two guardians.' },
+                      { id: 'teachers', title: 'Teachers', description: 'Creates teacher accounts and optionally marks head teachers.' },
+                      { id: 'staff', title: 'Staff', description: 'Creates staff accounts and assigns their department.' },
+                    ].map((template) => <label key={template.id} className={`cursor-pointer rounded-xl border p-4 transition ${importType === template.id ? 'border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 ring-1 ring-[var(--brand-blue)]' : 'border-[var(--border-default)] hover:border-[var(--brand-blue)]'}`}><input className="sr-only" type="radio" name="import-type" value={template.id} checked={importType === template.id} onChange={() => { setImportType(template.id); setImportErrors([]) }} /><span className="block text-sm font-semibold text-[var(--text-primary)]">{template.title}</span><span className="mt-1 block text-xs text-[var(--text-secondary)]">{template.description}</span><a className="mt-3 inline-flex text-xs font-medium text-[var(--brand-navy)] underline" href={`${import.meta.env.VITE_API_BASE_URL || ''}/api/users/templates/${template.id}.xlsx`} onClick={(event) => event.stopPropagation()}>Download template</a></label>)}
+                  </div>
+                  <div className="rounded-lg bg-[var(--bg-app)] p-3 text-xs text-[var(--text-secondary)]"><strong className="text-[var(--text-primary)]">Password options:</strong> leave password cells blank to generate secure temporary passwords automatically, or provide a 12+ character strong password. Credentials are emailed to newly created accounts.</div>
+                  <input type="file" accept=".xlsx,.xls" className="portal-input" onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportErrors([]) }} />
+                  {importErrors.length ? <div className="rounded-lg border border-[var(--brand-red)]/30 bg-[var(--brand-red-light)] p-3"><div className="text-sm font-semibold text-[var(--brand-red)]">Please correct these rows</div><ul className="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-xs text-[var(--text-secondary)]">{importErrors.map((item, index) => <li key={`${item.row}-${index}`}>Row {item.row}: {item.message}</li>)}</ul></div> : null}
+                  <button className="portal-button-primary">Validate &amp; Import {importType === 'students' ? 'Students & Guardians' : importType === 'teachers' ? 'Teachers' : 'Staff'}</button>
                 </form>
               </div>
             ),

@@ -6,10 +6,10 @@ from io import BytesIO
 from html import escape
 
 import pandas as pd
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from sqlalchemy import delete, func, or_
 from sqlalchemy.orm import Session, selectinload
@@ -105,28 +105,80 @@ def cleanup_invalid_family_records(db: Session = Depends(get_db), current_user: 
     return {'removed': removed, 'count': len(removed)}
 
 
-def _excel_template(columns: list[str], filename: str) -> StreamingResponse:
+IMPORT_TEMPLATES = {
+    'students': {
+        'filename': 'students-and-guardians-import-template.xlsx',
+        'sheet_title': 'Students & Guardians',
+        'columns': ['student_name', 'student_email', 'student_password', 'guardian_1_name', 'guardian_1_email', 'guardian_2_name', 'guardian_2_email'],
+        'required': {'student_name', 'student_email', 'guardian_1_name', 'guardian_1_email'},
+        'instructions': [
+            'One student per row. At least one parent or guardian is required.',
+            'Guardian 2 is optional. The same guardian email can be used for siblings.',
+            'Leave password columns blank to generate a secure temporary password automatically.',
+            'Any supplied password must have 12+ characters with upper/lowercase, a number, and a symbol.',
+        ],
+    },
+    'teachers': {
+        'filename': 'teachers-import-template.xlsx',
+        'sheet_title': 'Teachers',
+        'columns': ['teacher_name', 'teacher_email', 'teacher_password', 'head_teacher'],
+        'required': {'teacher_name', 'teacher_email'},
+        'instructions': [
+            'One teacher per row.',
+            'Use Yes or No in head_teacher. Only use Yes for a head teacher.',
+            'Leave teacher_password blank to generate a secure temporary password automatically.',
+        ],
+    },
+    'staff': {
+        'filename': 'staff-import-template.xlsx',
+        'sheet_title': 'Staff',
+        'columns': ['staff_name', 'staff_email', 'staff_password', 'department'],
+        'required': {'staff_name', 'staff_email', 'department'},
+        'instructions': [
+            'One staff member per row. Department is required.',
+            'A new department/domain is created automatically if it does not yet exist.',
+            'Leave staff_password blank to generate a secure temporary password automatically.',
+        ],
+    },
+}
+
+IMPORT_PREFIXES = {'students': 'student', 'teachers': 'teacher', 'staff': 'staff'}
+
+
+def _excel_template(template: dict) -> StreamingResponse:
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = 'Users'
-    sheet.append(columns)
-    for column_index, column in enumerate(columns, start=1):
-        sheet.cell(1, column_index).font = Font(bold=True)
+    sheet.title = template['sheet_title']
+    sheet.append(template['columns'])
+    header_fill = PatternFill('solid', fgColor='1B2B6B')
+    for column_index, column in enumerate(template['columns'], start=1):
+        cell = sheet.cell(1, column_index)
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center')
         sheet.column_dimensions[get_column_letter(column_index)].width = max(16, len(column) + 3)
+    sheet.freeze_panes = 'A2'
+    instructions = workbook.create_sheet('Instructions')
+    instructions.column_dimensions['A'].width = 110
+    instructions['A1'] = f"{template['sheet_title']} Import Template"
+    instructions['A1'].font = Font(bold=True, size=14, color='1B2B6B')
+    for row_number, instruction in enumerate(template['instructions'], start=3):
+        instructions.cell(row_number, 1, instruction).alignment = Alignment(wrap_text=True, vertical='top')
+    instructions['A8'] = 'Required columns'
+    instructions['A8'].font = Font(bold=True, color='1B2B6B')
+    instructions['A9'] = ', '.join(sorted(template['required']))
     output = BytesIO()
     workbook.save(output)
     output.seek(0)
-    return StreamingResponse(output, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+    return StreamingResponse(output, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers={'Content-Disposition': f'attachment; filename="{template["filename"]}"'})
 
 
-@router.get('/templates/standard-users.xlsx')
-def standard_users_template():
-    return _excel_template(['name', 'email', 'role', 'password', 'department'], 'standard-users-template.xlsx')
-
-
-@router.get('/templates/students.xlsx')
-def students_template():
-    return _excel_template(['name', 'email', 'role', 'password', 'guardian_1_name', 'guardian_1_email', 'guardian_2_name', 'guardian_2_email'], 'student-guardian-template.xlsx')
+@router.get('/templates/{import_type}.xlsx')
+def users_template(import_type: str):
+    template = IMPORT_TEMPLATES.get(import_type)
+    if not template:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Unknown import template')
+    return _excel_template(template)
 
 
 @router.get('')
@@ -228,9 +280,31 @@ def create_student(payload: StudentRegistration, background_tasks: BackgroundTas
     return response
 
 
+def _normalise_import_rows(frame: pd.DataFrame) -> list[dict[str, str]]:
+    frame.columns = [str(column).strip().lower().replace(' ', '_') for column in frame.columns]
+    return [{key: str(value).strip() for key, value in row.items()} for row in frame.to_dict(orient='records')]
+
+
+def _validate_import_password(value: str, label: str) -> str | None:
+    if not value:
+        return None
+    if not _valid_password(value):
+        return f'{label} must be 12+ characters and include uppercase, lowercase, a number, and a symbol'
+    return None
+
+
 @router.post('/import')
-async def import_users(background_tasks: BackgroundTasks, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin))):
-    """Import users from an Excel workbook without ever accepting a partial, invalid batch."""
+async def import_users(
+    background_tasks: BackgroundTasks,
+    import_type: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.admin)),
+):
+    """Import a role-specific Excel workbook only after the complete batch has passed validation."""
+    template = IMPORT_TEMPLATES.get(import_type)
+    if not template:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Choose Students & Guardians, Teachers, or Staff before importing')
     filename = (file.filename or '').lower()
     if not filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Upload an Excel .xlsx or .xls file')
@@ -241,54 +315,85 @@ async def import_users(background_tasks: BackgroundTasks, file: UploadFile = Fil
         frame = pd.read_excel(BytesIO(contents), dtype=str).fillna('')
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='The Excel file could not be read') from exc
-    frame.columns = [str(column).strip().lower().replace(' ', '_') for column in frame.columns]
-    required = {'name', 'email', 'role', 'password'}
-    missing = sorted(required - set(frame.columns))
+    rows = _normalise_import_rows(frame)
+    missing = sorted(template['required'] - set(frame.columns))
     if missing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Missing required columns: {', '.join(missing)}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"This is not the {template['sheet_title']} template. Missing columns: {', '.join(missing)}")
     if frame.empty:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='The workbook has no user rows')
 
-    rows = [{key: str(value).strip() for key, value in row.items()} for row in frame.to_dict(orient='records')]
     errors: list[dict] = []
-    seen_emails: set[str] = set()
+    primary_emails: set[str] = set()
+    guardian_details: dict[str, str] = {}
     for index, row in enumerate(rows, start=2):
-        email = row['email'].lower()
-        role = row['role'].lower()
-        if not row['name'] or not _valid_email(email) or not _valid_password(row['password']):
-            errors.append({'row': index, 'message': 'Name, valid email, and a strong password are required'})
-            continue
-        if role not in {item.value for item in UserRole}:
-            errors.append({'row': index, 'message': 'Role must be admin, teacher, staff, student, or parent'})
-        if role == 'staff' and not row.get('department', ''):
-            errors.append({'row': index, 'message': 'Department is required for staff'})
-        if role == 'student' and (not row.get('guardian_1_name', '') or not _valid_email(row.get('guardian_1_email', '').lower())):
-            errors.append({'row': index, 'message': 'Students require guardian_1_name and guardian_1_email'})
-        if row.get('guardian_2_email', '') and (not row.get('guardian_2_name', '') or not _valid_email(row['guardian_2_email'].lower())):
-            errors.append({'row': index, 'message': 'guardian_2 requires both a name and valid email'})
-        if email in seen_emails or db.query(User.id).filter(func.lower(User.email) == email).first():
-            errors.append({'row': index, 'message': 'Email already exists'})
-        seen_emails.add(email)
+        prefix = IMPORT_PREFIXES[import_type]
+        name = row.get(f'{prefix}_name', '')
+        email = row.get(f'{prefix}_email', '').lower()
+        password = row.get(f'{prefix}_password', '')
+        if not name or not _valid_email(email):
+            errors.append({'row': index, 'message': 'A name and valid email address are required'})
+        password_error = _validate_import_password(password, f'{prefix.title()} password')
+        if password_error:
+            errors.append({'row': index, 'message': password_error})
+        if email in primary_emails:
+            errors.append({'row': index, 'message': 'This email is repeated in the workbook'})
+        primary_emails.add(email)
+        if email and db.query(User.id).filter(func.lower(User.email) == email).first():
+            errors.append({'row': index, 'message': 'An account with this email already exists'})
+        if import_type == 'staff' and not row.get('department', ''):
+            errors.append({'row': index, 'message': 'Department is required for every staff member'})
+        if import_type == 'teachers' and row.get('head_teacher', '').lower() not in {'', 'yes', 'no', 'true', 'false'}:
+            errors.append({'row': index, 'message': 'head_teacher must be Yes or No'})
+        if import_type == 'students':
+            for number in (1, 2):
+                guardian_name = row.get(f'guardian_{number}_name', '')
+                guardian_email = row.get(f'guardian_{number}_email', '').lower()
+                if number == 1 and (not guardian_name or not _valid_email(guardian_email)):
+                    errors.append({'row': index, 'message': 'Guardian 1 needs a name and valid email address'})
+                    continue
+                if guardian_email and (not guardian_name or not _valid_email(guardian_email)):
+                    errors.append({'row': index, 'message': f'Guardian {number} needs both a name and valid email address'})
+                    continue
+                if guardian_email:
+                    if guardian_email == email:
+                        errors.append({'row': index, 'message': 'A student and guardian cannot use the same email address'})
+                    previous_name = guardian_details.get(guardian_email)
+                    if previous_name and previous_name.lower() != guardian_name.lower():
+                        errors.append({'row': index, 'message': 'The same guardian email has different names in the workbook'})
+                    guardian_details[guardian_email] = guardian_name
+                    existing = db.query(User).filter(func.lower(User.email) == guardian_email).first()
+                    if existing and existing.role != UserRole.parent:
+                        errors.append({'row': index, 'message': f'{guardian_email} belongs to a non-parent account'})
+    for guardian_email in guardian_details:
+        if guardian_email in primary_emails:
+            errors.append({'row': 'Workbook', 'message': f'{guardian_email} is used as both a primary account and guardian'})
     if errors:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'message': 'No users were imported. Correct the listed rows and try again.', 'errors': errors})
 
     created: list[tuple[User, str]] = []
     try:
         for row in rows:
-            email, role = row['email'].lower(), UserRole(row['role'].lower())
-            if role != UserRole.student:
-                user = User(name=row['name'], email=email, hashed_password=get_password_hash(row['password']), role=role, department=row.get('department') or None, is_active=True)
+            prefix = IMPORT_PREFIXES[import_type]
+            email = row[f'{prefix}_email'].lower()
+            password = row.get(f'{prefix}_password') or _generated_password()
+            if import_type != 'students':
+                role = UserRole.teacher if import_type == 'teachers' else UserRole.staff
+                user = User(
+                    name=row[f'{prefix}_name'], email=email, hashed_password=get_password_hash(password), role=role,
+                    head_teacher=import_type == 'teachers' and row.get('head_teacher', '').lower() in {'yes', 'true'},
+                    department=row.get('department') or None, is_active=True,
+                )
                 db.add(user)
-                if role == UserRole.staff and row.get('department'):
+                if role == UserRole.staff:
                     department = db.query(Department).filter(Department.name == row['department']).first() or Department(name=row['department'])
                     db.add(department)
                     user.departments.append(department)
-                created.append((user, row['password']))
+                created.append((user, password))
                 continue
-            student = User(name=row['name'], email=email, hashed_password=get_password_hash(row['password']), role=UserRole.student, is_active=True)
+            student = User(name=row['student_name'], email=email, hashed_password=get_password_hash(password), role=UserRole.student, is_active=True)
             db.add(student)
             db.flush()
-            created.append((student, row['password']))
+            created.append((student, password))
             for number in (1, 2):
                 guardian_email = row.get(f'guardian_{number}_email', '').lower()
                 guardian_name = row.get(f'guardian_{number}_name', '')
@@ -310,7 +415,7 @@ async def import_users(background_tasks: BackgroundTasks, file: UploadFile = Fil
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f'No users were imported: {str(exc)}') from exc
     for user, password in created:
         _queue_welcome_email(background_tasks, user, password)
-    return {'count': len(rows), 'accounts_created': len(created), 'message': 'Users were imported and credential emails have been queued'}
+    return {'rows_imported': len(rows), 'accounts_created': len(created), 'message': f'{len(rows)} {template["sheet_title"].lower()} row(s) imported. Credential emails have been queued.'}
 
 
 @router.patch('/{user_id}')

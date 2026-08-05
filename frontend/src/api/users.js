@@ -4,9 +4,10 @@ export const usersApi = {
   list: () => api.get('/api/users'),
   create: (payload) => api.post('/api/users', payload),
   createStudent: (payload) => api.post('/api/users/students', payload),
-  import: (file) => {
+  import: (file, importType) => {
     const data = new FormData()
     data.append('file', file)
+    data.append('import_type', importType)
     return api.post('/api/users/import', data)
   },
   cleanupInvalidFamilyRecords: () => api.post('/api/users/cleanup-invalid-family-records'),
