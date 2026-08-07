@@ -74,8 +74,8 @@ import { SkeletonCardGrid, SkeletonStatGrid, SkeletonTable, SkeletonList, TopPro
 import CreateMeetingModal from '../components/shared/CreateMeetingModal.jsx'
 import UserSearchSelect from '../components/shared/UserSearchSelect.jsx'
 import RecipientSearchSelect from '../components/shared/RecipientSearchSelect.jsx'
+import HoldToRevealPasswordInput from '../components/shared/HoldToRevealPasswordInput.jsx'
 const formatDate = (value, pattern = 'PPP') => (value ? format(parseISO(value), pattern) : '—')
-const parentChildPrefix = (user) => user?.role === 'parent' && user.children?.[0]?.name ? `${user.children[0].name}'s ` : ''
 const todayInputValue = () => new Date().toISOString().slice(0, 10)
 const futureDateTimeInputValue = () => {
   const now = new Date()
@@ -2120,7 +2120,7 @@ export function PortalManagementView() {
                   <div>
                     <label className="portal-label block">Temporary password</label>
                     <div className="mt-1 flex gap-2">
-                      <input required type="text" className="portal-input" value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} />
+                      <HoldToRevealPasswordInput required className="portal-input" value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} />
                       <button type="button" className="portal-button-secondary whitespace-nowrap" onClick={generateTemporaryPassword}>Generate</button>
                     </div>
                     <p className="mt-1 text-xs text-[var(--text-muted)]">Use Generate for a secure 16-character password. It will be emailed to the user.</p>
@@ -2214,7 +2214,8 @@ export function StudentHomeView({ titlePrefix = '' }) {
 
   const noticeHighlights = notices.slice(0, 2)
   const recentReports = results.slice(0, 4)
-  const resultsHeading = titlePrefix ? "Your Child's Results" : 'My Results'
+  const isParent = user?.role === 'parent'
+  const resultsHeading = isParent ? "Your Ward's Results" : titlePrefix ? "Your Child's Results" : 'My Results'
   const portalPath = user?.role === 'parent' ? '/parent' : '/student'
   const openResults = () => navigate(`${portalPath}/results`)
   const openResultsFromKeyboard = (event) => {
@@ -2226,7 +2227,7 @@ export function StudentHomeView({ titlePrefix = '' }) {
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}${user?.role === 'parent' ? '' : user?.name ? `${user.name}'s ` : 'Welcome back, '}Home`} subtitle={format(new Date(), 'EEEE, d MMMM yyyy')} />
+      <PageHeader title={isParent ? 'Parent Home' : `${titlePrefix}${user?.name ? `${user.name}'s ` : 'Welcome back, '}Home`} subtitle={format(new Date(), 'EEEE, d MMMM yyyy')} />
       <div className="grid gap-6 lg:grid-cols-2">
         <div role="link" tabIndex={0} aria-label={`Open ${resultsHeading}`} onClick={openResults} onKeyDown={openResultsFromKeyboard} className="portal-panel cursor-pointer transition hover:border-[var(--brand-blue)] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30">
           <div className="mb-3 text-sm font-medium text-[var(--text-primary)]">{resultsHeading}</div>
@@ -2239,7 +2240,7 @@ export function StudentHomeView({ titlePrefix = '' }) {
                   <tr className="border-b border-[var(--border-default)] bg-[var(--bg-app)]">
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Subject</th>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Term</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">My Grade</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">{isParent ? "Ward's Grade" : 'My Grade'}</th>
                     <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Class Avg</th>
                     <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Attendance</th>
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">vs Average</th>
@@ -2270,7 +2271,7 @@ export function StudentHomeView({ titlePrefix = '' }) {
               </table>
             </div>
           ) : (
-            <EmptyState icon={BookOpen} title="No results published yet. Check back after your teacher uploads your report." />
+            <EmptyState icon={BookOpen} title={isParent ? "No results published yet. Check back after your ward's teacher uploads their report." : 'No results published yet. Check back after your teacher uploads your report.'} />
           )}
         </div>
         <div className="space-y-4">
@@ -2306,6 +2307,7 @@ export function StudentProgressView({ titlePrefix = '' }) {
   const { user } = useAuth()
   const { data: results = [], loading: resultsLoading } = useApi(() => resultsApi.list(), [])
   const chartData = useMemo(() => results.map((result) => ({ subject: result.subject, mine: result.grade, average: result.class_average })), [results])
+  const isParent = user?.role === 'parent'
   
   if (resultsLoading) return <><TopProgressBar /><div className="portal-panel"><div className="h-80 w-full skeleton-shimmer" /></div></>
   if (!results.length) {
@@ -2314,7 +2316,7 @@ export function StudentProgressView({ titlePrefix = '' }) {
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Progress Dashboard`} subtitle="Track your academic performance over time." />
+      <PageHeader title={isParent ? "Your Ward's Progress" : `${titlePrefix}Progress Dashboard`} subtitle={isParent ? "Track your ward's academic performance over time." : 'Track your academic performance over time.'} />
       <div className="portal-panel">
         <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -2324,7 +2326,7 @@ export function StudentProgressView({ titlePrefix = '' }) {
               <YAxis stroke="#4a5080" />
               <Tooltip />
               <Legend />
-              <Bar dataKey="mine" name="My Grade" fill="#1B2B6B" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="mine" name={isParent ? "Ward's Grade" : 'My Grade'} fill="#1B2B6B" radius={[4, 4, 0, 0]} />
               <Bar dataKey="average" name="Class Average" fill="#E8734A" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -2345,11 +2347,12 @@ export function StudentProgressView({ titlePrefix = '' }) {
 export function StudentResultHistoryView({ titlePrefix = '' }) {
   const { user } = useAuth()
   const { data: results = [], loading: resultsLoading } = useApi(() => resultsApi.list(), [])
-  const heading = user?.role === 'parent' ? `${parentChildPrefix(user) || 'Child '}Results` : titlePrefix ? "Your Child's Results" : 'My Results'
+  const isParent = user?.role === 'parent'
+  const heading = isParent ? "Your Ward's Results" : titlePrefix ? "Your Child's Results" : 'My Results'
 
   return (
     <div>
-      <PageHeader title={heading} subtitle="Review your released results." />
+      <PageHeader title={heading} subtitle={isParent ? "Review your ward's released results." : 'Review your released results.'} />
       {results.length ? (
         <div className="overflow-x-auto rounded-lg border border-[var(--border-default)]">
           <table className="w-full">
@@ -2357,7 +2360,7 @@ export function StudentResultHistoryView({ titlePrefix = '' }) {
               <tr className="border-b border-[var(--border-default)] bg-[var(--bg-app)]">
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Subject</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Term</th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">My Grade</th>
+                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">{isParent ? "Ward's Grade" : 'My Grade'}</th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Class Avg</th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Attendance</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">vs Average</th>
@@ -2388,7 +2391,7 @@ export function StudentResultHistoryView({ titlePrefix = '' }) {
           </table>
         </div>
       ) : !resultsLoading ? (
-        <EmptyState icon={BookOpen} title="No results published yet. Check back after your teacher uploads your report." />
+        <EmptyState icon={BookOpen} title={isParent ? "No results published yet. Check back after your ward's teacher uploads their report." : 'No results published yet. Check back after your teacher uploads your report.'} />
       ) : null}
     </div>
   )
@@ -2401,7 +2404,7 @@ export function NoticeBoardView({ titlePrefix = '' }) {
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Notice Board`} subtitle="Read recent notices and announcements." />
+      <PageHeader title={user?.role === 'parent' ? 'Notice board' : `${titlePrefix}Notice Board`} subtitle="Read recent notices and announcements." />
       {noticesLoading ? (
         <SkeletonCardGrid count={4} />
       ) : notices.length === 0 ? (
@@ -2435,7 +2438,7 @@ export function OpportunityBoardView({ titlePrefix = '' }) {
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Opportunities`} subtitle="Discover scholarships and enrichment opportunities." />
+      <PageHeader title={user?.role === 'parent' ? 'Opportunities for Your Ward' : `${titlePrefix}Opportunities`} subtitle={user?.role === 'parent' ? 'Discover scholarships and enrichment opportunities for your ward.' : 'Discover scholarships and enrichment opportunities.'} />
       <div className="grid gap-4 md:grid-cols-2">
         {opportunities.map((opportunity) => {
           const soon = opportunity.deadline ? new Date(opportunity.deadline) - new Date() < 7 * 24 * 60 * 60 * 1000 : false
@@ -2575,7 +2578,7 @@ export function SettingsView({ titlePrefix = '' }) {
 
   return (
     <div>
-      <PageHeader title={`${titlePrefix || parentChildPrefix(user)}Settings`} subtitle="Manage your account, security, and preferences." />
+      <PageHeader title={user?.role === 'parent' ? 'Your Settings' : `${titlePrefix}Settings`} subtitle="Manage your account, security, and preferences." />
       <div className="mb-6 rounded-2xl bg-[var(--brand-navy)] p-6 text-white"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">Account settings</div><div className="mt-2 text-2xl font-semibold">Manage your profile, security, and preferences</div><div className="mt-1 text-sm text-white/70">Signed in as {user?.role || 'portal member'}.</div></div>
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="portal-panel lg:col-span-2">
@@ -2625,7 +2628,7 @@ export function SettingsView({ titlePrefix = '' }) {
         </div>
         <div className="portal-panel">
           <div className="text-sm font-medium text-[var(--text-primary)]">Change Password</div>
-          {!passwordCodeSent ? <div className="mt-4 space-y-3"><p className="text-sm text-[var(--text-secondary)]">We’ll email a six-digit verification code before changing your password.</p><button type="button" className="portal-button-primary" onClick={requestPasswordCode}>Email verification code</button></div> : <div className="mt-4 space-y-3"><input inputMode="numeric" maxLength="6" className="portal-input" placeholder="Six-digit code" value={passwordForm.otp} onChange={(event) => setPasswordForm({ ...passwordForm, otp: event.target.value })} /><input type="password" className="portal-input" placeholder="New password" value={passwordForm.new_password} onChange={(event) => setPasswordForm({ ...passwordForm, new_password: event.target.value })} /><input type="password" className="portal-input" placeholder="Confirm new password" value={passwordForm.confirm_password} onChange={(event) => setPasswordForm({ ...passwordForm, confirm_password: event.target.value })} /><p className="text-xs text-[var(--text-muted)]">12+ characters with uppercase, lowercase, a number, and a symbol.</p><button type="button" className="portal-button-primary" onClick={changePassword}>Change password</button></div>}
+          {!passwordCodeSent ? <div className="mt-4 space-y-3"><p className="text-sm text-[var(--text-secondary)]">We’ll email a six-digit verification code before changing your password.</p><button type="button" className="portal-button-primary" onClick={requestPasswordCode}>Email verification code</button></div> : <div className="mt-4 space-y-3"><input inputMode="numeric" maxLength="6" className="portal-input" placeholder="Six-digit code" value={passwordForm.otp} onChange={(event) => setPasswordForm({ ...passwordForm, otp: event.target.value })} /><HoldToRevealPasswordInput className="portal-input" placeholder="New password" value={passwordForm.new_password} onChange={(event) => setPasswordForm({ ...passwordForm, new_password: event.target.value })} /><HoldToRevealPasswordInput className="portal-input" placeholder="Confirm new password" value={passwordForm.confirm_password} onChange={(event) => setPasswordForm({ ...passwordForm, confirm_password: event.target.value })} /><p className="text-xs text-[var(--text-muted)]">12+ characters with uppercase, lowercase, a number, and a symbol.</p><button type="button" className="portal-button-primary" onClick={changePassword}>Change password</button></div>}
         </div>
       </div>
     </div>

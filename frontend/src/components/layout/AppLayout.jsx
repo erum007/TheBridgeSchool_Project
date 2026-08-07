@@ -54,10 +54,10 @@ const studentNav = [
 const parentNav = [
   { label: 'Parent', items: [
     { to: '/parent/home', label: 'Home', icon: Shield },
-    { to: '/parent/results', label: 'Result History', icon: ClipboardList },
+    { to: '/parent/results', label: "Ward's Results", icon: ClipboardList },
     { to: '/parent/notices', label: 'Notice Board', icon: FileText },
-    { to: '/parent/opportunities', label: 'Opportunities', icon: WalletCards },
-    { to: '/parent/settings', label: 'Settings', icon: Users },
+    { to: '/parent/opportunities', label: "Ward's Opportunities", icon: WalletCards },
+    { to: '/parent/settings', label: 'My Settings', icon: Users },
   ] },
 ]
 

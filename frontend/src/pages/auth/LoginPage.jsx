@@ -5,6 +5,7 @@ import { School } from 'lucide-react'
 
 import { useAuth } from '../../context/AuthContext.jsx'
 import { authApi } from '../../api/auth.js'
+import HoldToRevealPasswordInput from '../../components/shared/HoldToRevealPasswordInput.jsx'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -99,8 +100,7 @@ export default function LoginPage() {
             </div>
             <div>
               <label className="portal-label">Password</label>
-              <input
-                type="password"
+              <HoldToRevealPasswordInput
                 className="portal-input mt-1"
                 placeholder="enter your password"
                 value={form.password}
@@ -110,7 +110,7 @@ export default function LoginPage() {
             {showForgotPassword ? (
               <div className="mt-4 rounded-lg border border-[var(--border-default)] bg-[var(--bg-app)] p-4">
                 <p className="mb-3 text-sm font-medium text-[var(--text-primary)]">{otpSent ? 'Enter the six-digit code from your email and choose a new password.' : 'Enter your email to receive a verification code.'}</p>
-                {!otpSent ? <input type="email" placeholder="Your email address" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} className="mb-3 w-full rounded-lg border border-[var(--border-default)] px-3 py-2.5 text-sm focus:border-[var(--brand-navy)] focus:outline-none" /> : <div className="space-y-2"><input inputMode="numeric" maxLength="6" placeholder="Verification code" className="portal-input" value={resetForm.otp} onChange={(event) => setResetForm({ ...resetForm, otp: event.target.value })} /><input type="password" placeholder="New password" className="portal-input" value={resetForm.new_password} onChange={(event) => setResetForm({ ...resetForm, new_password: event.target.value })} /><input type="password" placeholder="Confirm new password" className="portal-input" value={resetForm.confirm_password} onChange={(event) => setResetForm({ ...resetForm, confirm_password: event.target.value })} /><p className="text-xs text-[var(--text-muted)]">Use 12+ characters with upper/lowercase, a number, and a symbol.</p></div>}
+                {!otpSent ? <input type="email" placeholder="Your email address" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} className="mb-3 w-full rounded-lg border border-[var(--border-default)] px-3 py-2.5 text-sm focus:border-[var(--brand-navy)] focus:outline-none" /> : <div className="space-y-2"><input inputMode="numeric" maxLength="6" placeholder="Verification code" className="portal-input" value={resetForm.otp} onChange={(event) => setResetForm({ ...resetForm, otp: event.target.value })} /><HoldToRevealPasswordInput placeholder="New password" className="portal-input" value={resetForm.new_password} onChange={(event) => setResetForm({ ...resetForm, new_password: event.target.value })} /><HoldToRevealPasswordInput placeholder="Confirm new password" className="portal-input" value={resetForm.confirm_password} onChange={(event) => setResetForm({ ...resetForm, confirm_password: event.target.value })} /><p className="text-xs text-[var(--text-muted)]">Use 12+ characters with upper/lowercase, a number, and a symbol.</p></div>}
                 <div className="mt-3 flex gap-2">
                   <button type="button" onClick={otpSent ? completeReset : handleForgotPassword} className="portal-button-primary px-4 py-2 text-sm">{otpSent ? 'Reset Password' : 'Send Code'}</button>
                   <button type="button" onClick={() => setShowForgotPassword(false)} className="portal-button-secondary px-4 py-2 text-sm">Cancel</button>
@@ -152,8 +152,8 @@ export function ResetPasswordPage() {
         <h1 className="font-display text-2xl font-bold text-[var(--brand-navy)]">Reset Password</h1>
         <input type="email" className="portal-input" placeholder="Email address" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
         <input inputMode="numeric" maxLength="6" className="portal-input" placeholder="Verification code" value={form.otp} onChange={(event) => setForm({ ...form, otp: event.target.value })} />
-        <input type="password" className="portal-input" placeholder="New password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} />
-        <input type="password" className="portal-input" placeholder="Confirm password" value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} />
+        <HoldToRevealPasswordInput className="portal-input" placeholder="New password" value={form.new_password} onChange={(event) => setForm({ ...form, new_password: event.target.value })} />
+        <HoldToRevealPasswordInput className="portal-input" placeholder="Confirm password" value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} />
         <button type="submit" className="portal-button-primary w-full">Reset Password</button>
       </form>
     </div>
