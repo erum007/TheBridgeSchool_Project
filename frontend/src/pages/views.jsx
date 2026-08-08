@@ -177,6 +177,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   const { data: actionItems = [], error: actionItemsError, refetch: refetchActions } = useApi(() => actionItemsApi.list(), [])
   const { data: users = [], error: usersError } = useApi(() => usersApi.list(), [])
   const [meetingModalOpen, setMeetingModalOpen] = useState(false)
+  const [selectedMeeting, setSelectedMeeting] = useState(null)
   const [localActionItems, setLocalActionItems] = useState([])
   const [pendingActionStatusIds, setPendingActionStatusIds] = useState({})
   const [pendingReminderIds, setPendingReminderIds] = useState({})
@@ -184,11 +185,14 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   const localActionItemsRef = useRef([])
   const [selectedPastMeeting, setSelectedPastMeeting] = useState(null)
   const [notes, setNotes] = useState('')
+  const [notesDirty, setNotesDirty] = useState(false)
+  const [notesSaving, setNotesSaving] = useState(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summary, setSummary] = useState('')
   const [keyDecisions, setKeyDecisions] = useState([])
   const [generatedActionItems, setGeneratedActionItems] = useState([])
   const [assigneeFilter, setAssigneeFilter] = useState('all')
+  const [meetingFilter, setMeetingFilter] = useState('all')
   const initialWorkspaceTab = searchParams.get('tab')
   const [workspaceTab, setWorkspaceTab] = useState(['meetings', 'past', 'board'].includes(initialWorkspaceTab) ? initialWorkspaceTab : 'meetings')
   const [actionForm, setActionForm] = useState({ meeting_id: '', description: '', assigned_to: '', due_date: '', email_reminder_frequency: 'none', email_reminder_at: '' })
@@ -197,6 +201,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
 
   const visibleMeetings = meetings.filter((meeting) => meeting.status)
   const pastMeetings = useMemo(() => meetings.filter((meeting) => meeting.status === 'past'), [meetings])
+  const selectedPastMeetingData = useMemo(() => pastMeetings.find((meeting) => meeting.id === Number(selectedPastMeeting)), [pastMeetings, selectedPastMeeting])
   useEffect(() => {
     setLocalActionItems(actionItems)
     localActionItemsRef.current = actionItems
@@ -206,6 +211,11 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     if (assigneeFilter === 'all') return visibleItems
     return visibleItems.filter((item) => String(item.assigned_to) === String(assigneeFilter))
   }, [actionItems, assigneeFilter, localActionItems])
+  const workspaceActions = useMemo(() => {
+    if (meetingFilter === 'all') return filteredActions
+    if (meetingFilter === 'none') return filteredActions.filter((item) => !item.meeting_id)
+    return filteredActions.filter((item) => String(item.meeting_id) === String(meetingFilter))
+  }, [filteredActions, meetingFilter])
   const assignableUsers = useMemo(() => users.filter((person) => person.is_active && ['admin', 'teacher', 'staff'].includes(person.role)), [users])
   const assigneeMatches = useMemo(() => {
     const query = assigneeSearch.trim().toLowerCase()
@@ -229,16 +239,20 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
       setSelectedPastMeeting(pastMeetings[0].id)
       setNotes(pastMeetings[0].notes || '')
       setSummary(pastMeetings[0].ai_summary || '')
+      setNotesDirty(false)
     }
   }, [pastMeetings, selectedPastMeeting])
 
-  useEffect(() => {
-    const nextMeeting = pastMeetings.find((meeting) => meeting.id === Number(selectedPastMeeting))
-    if (nextMeeting) {
-      setNotes(nextMeeting.notes || '')
-      setSummary(nextMeeting.ai_summary || '')
-    }
-  }, [selectedPastMeeting, pastMeetings])
+  const selectPastMeeting = (meetingId) => {
+    const meeting = pastMeetings.find((item) => item.id === Number(meetingId))
+    if (!meeting) return
+    setSelectedPastMeeting(meeting.id)
+    setNotes(meeting.notes || '')
+    setSummary(meeting.ai_summary || '')
+    setKeyDecisions([])
+    setGeneratedActionItems([])
+    setNotesDirty(false)
+  }
 
   const saveNotes = async () => {
     if (!selectedPastMeeting) {
@@ -246,13 +260,15 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
       return
     }
     try {
+      setNotesSaving(true)
       await meetingsApi.update(selectedPastMeeting, { notes })
+      setNotesDirty(false)
       toast.success('Notes saved')
       refetchMeetings()
     } catch (error) {
       console.error('Failed to save meeting notes', error)
       toast.error(error?.response?.data?.detail || 'Could not save notes')
-    }
+    } finally { setNotesSaving(false) }
   }
 
   const generateSummary = async () => {
@@ -263,6 +279,10 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     const transcript = notes.trim()
     if (!transcript) {
       toast.error('Add meeting notes before generating an AI summary')
+      return
+    }
+    if (notesDirty) {
+      toast.error('Save your notes before generating an AI summary')
       return
     }
     setSummaryLoading(true)
@@ -349,7 +369,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
   const boardColumns = ['todo', 'in_progress', 'done'].map((status) => ({
     id: status,
     title: status.replace('_', ' ').toUpperCase(),
-    items: filteredActions.filter((item) => item.status === status).map((item) => ({
+    items: workspaceActions.filter((item) => item.status === status).map((item) => ({
       ...item,
       assignedToName: item.assigned_to_name,
       dueDate: item.due_date ? formatDate(item.due_date) : '',
@@ -384,8 +404,12 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
 
   const createActionItem = async (event) => {
     event.preventDefault()
+    if (!actionForm.meeting_id || !actionForm.description.trim() || !actionForm.assigned_to) {
+      toast.error('Select a meeting and assignee, then enter an action item description')
+      return
+    }
     try {
-      await actionItemsApi.create(actionForm)
+      await actionItemsApi.create({ ...actionForm, description: actionForm.description.trim() })
       setActionForm({ meeting_id: '', description: '', assigned_to: '', due_date: '', email_reminder_frequency: 'none', email_reminder_at: '' })
       setAssigneeSearch('')
       setAssigneePickerOpen(false)
@@ -441,12 +465,14 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                 loading={meetingsLoading}
                 data={visibleMeetings}
                 columns={[
-                  { key: 'scheduled_at', label: 'Date', render: (row) => formatDate(row.scheduled_at) },
+                  { key: 'scheduled_at', label: 'Schedule', render: (row) => <div><div>{formatDate(row.scheduled_at, 'PPP')}</div><div className="mt-0.5 text-xs text-[var(--text-muted)]">{formatDate(row.scheduled_at, 'p')} – {formatDate(row.end_time, 'p')}</div></div> },
                   { key: 'title', label: 'Title' },
                   { key: 'department', label: 'Department' },
                   { key: 'attendees', label: 'Attendees', render: (row) => row.attendees?.length ?? 0, align: 'right' },
+                  { key: 'action_items', label: 'Actions', render: (row) => row.action_items?.length ?? 0, align: 'right' },
                   { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
                 ]}
+                onRowClick={setSelectedMeeting}
                 emptyMessage="No meetings have been scheduled yet."
               />
             ),
@@ -458,25 +484,19 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
               <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
                 <div className="rounded-xl border border-[var(--border-default)] bg-white p-4">
                   <label className="portal-label block">Past meetings</label>
-                  <select className="portal-input mt-1" value={selectedPastMeeting || ''} onChange={(event) => {
-                    setSelectedPastMeeting(event.target.value)
-                    setKeyDecisions([])
-                    setGeneratedActionItems([])
-                  }}>
+                  <select className="portal-input mt-1" value={selectedPastMeeting || ''} onChange={(event) => selectPastMeeting(event.target.value)}>
                     {pastMeetings.map((meeting) => <option key={meeting.id} value={meeting.id}>{meeting.title}</option>)}
                   </select>
-                  <div className="mt-4 text-sm text-[var(--text-secondary)]">
-                    Select a completed meeting to review notes and generate a summary.
-                  </div>
+                  {selectedPastMeetingData ? <div className="mt-4 rounded-lg bg-[var(--bg-app)] p-3 text-xs text-[var(--text-secondary)]"><div className="font-medium text-[var(--text-primary)]">{formatDate(selectedPastMeetingData.scheduled_at, 'PPP p')}</div><div className="mt-1">{selectedPastMeetingData.action_items?.length || 0} linked action item(s)</div></div> : null}
                 </div>
                 <div className="space-y-4 portal-panel">
                   <div>
-                    <label className="portal-label block">Meeting notes</label>
-                    <textarea className="portal-input mt-1 min-h-40" value={notes} onChange={(event) => setNotes(event.target.value)} onBlur={saveNotes} />
+                    <div className="flex items-center justify-between gap-3"><label className="portal-label block">Meeting notes</label><span className={`text-xs ${notesDirty ? 'text-[var(--brand-red)]' : 'text-[var(--text-muted)]'}`}>{notesDirty ? 'Unsaved changes' : 'All changes saved'}</span></div>
+                    <textarea className="portal-input mt-1 min-h-48" value={notes} onChange={(event) => { setNotes(event.target.value); setNotesDirty(true) }} placeholder="Capture discussion points, outcomes, and follow-ups. Notes are only saved when you click Save Notes." />
                   </div>
                   <div className="flex flex-wrap gap-3">
-                    <button type="button" className="portal-button-primary" onClick={generateSummary} disabled={summaryLoading}>{summaryLoading ? 'Generating...' : 'Generate AI Summary'}</button>
-                    <button type="button" className="portal-button-secondary" onClick={saveNotes}>Save Notes</button>
+                    <button type="button" className="portal-button-primary" onClick={generateSummary} disabled={summaryLoading || notesDirty}>{summaryLoading ? 'Generating...' : 'Generate AI Summary'}</button>
+                    <button type="button" className="portal-button-secondary" onClick={saveNotes} disabled={notesSaving || !notesDirty}>{notesSaving ? 'Saving…' : 'Save Notes'}</button>
                     {summary ? <button type="button" className="portal-button-secondary" onClick={downloadSummaryPdf}>Download Summary as PDF</button> : null}
                   </div>
                   <div className="rounded-lg border-l-4 border-[var(--brand-red)] bg-[var(--brand-red-light)] p-4 text-sm text-[var(--brand-navy)]">
@@ -519,14 +539,24 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                       {assignableUsers.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
                     </select>
                   </div>
+                  <div>
+                    <label className="portal-label block">Filter by meeting</label>
+                    <select className="portal-input mt-1" value={meetingFilter} onChange={(event) => setMeetingFilter(event.target.value)}>
+                      <option value="all">All meetings</option>
+                      <option value="none">Unlinked action items</option>
+                      {meetings.map((meeting) => <option key={meeting.id} value={meeting.id}>{meeting.title}</option>)}
+                    </select>
+                  </div>
                 </div>
+                <div className="rounded-lg bg-[var(--bg-app)] px-4 py-3 text-sm text-[var(--text-secondary)]">Showing <strong className="text-[var(--text-primary)]">{workspaceActions.length}</strong> action item{workspaceActions.length === 1 ? '' : 's'}{meetingFilter !== 'all' ? ' for the selected meeting filter' : ''}.</div>
                 <KanbanBoard columns={boardColumns} onStatusChange={changeActionStatus} pendingStatusItemIds={pendingActionStatusIds} onSendReminderNow={sendReminderNow} pendingReminderIds={pendingReminderIds} cooldownReminderIds={cooldownReminderIds} />
                 {canCreateMeeting ? <form className="grid gap-4 portal-panel lg:grid-cols-4" onSubmit={createActionItem}>
-                  <select className="portal-input" value={actionForm.meeting_id} onChange={(event) => setActionForm({ ...actionForm, meeting_id: event.target.value })}>
+                  <div className="lg:col-span-4"><div className="text-sm font-semibold text-[var(--text-primary)]">Add a linked action item</div><p className="mt-1 text-xs text-[var(--text-muted)]">Every action item belongs to a meeting, so decisions and follow-up remain connected.</p></div>
+                  <select required aria-label="Meeting" className="portal-input" value={actionForm.meeting_id} onChange={(event) => setActionForm({ ...actionForm, meeting_id: event.target.value })}>
                     <option value="">Select meeting</option>
                     {meetings.map((meeting) => <option key={meeting.id} value={meeting.id}>{meeting.title}</option>)}
                   </select>
-                  <input className="portal-input" placeholder="Action item description" value={actionForm.description} onChange={(event) => setActionForm({ ...actionForm, description: event.target.value })} />
+                  <input required className="portal-input" placeholder="Action item description" value={actionForm.description} onChange={(event) => setActionForm({ ...actionForm, description: event.target.value })} />
                   <UserSearchSelect
                     users={assignableUsers}
                     value={actionForm.assigned_to}
@@ -561,6 +591,23 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
           },
         ]}
       />
+      <Modal isOpen={Boolean(selectedMeeting)} onClose={() => setSelectedMeeting(null)} title={selectedMeeting?.title || 'Meeting details'} size="large">
+        {selectedMeeting ? <div className="space-y-6">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg bg-[var(--bg-app)] p-4"><div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Start</div><div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{formatDate(selectedMeeting.scheduled_at, 'PPP p')}</div></div>
+            <div className="rounded-lg bg-[var(--bg-app)] p-4"><div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">End</div><div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{formatDate(selectedMeeting.end_time, 'PPP p')}</div></div>
+            <div className="rounded-lg bg-[var(--bg-app)] p-4"><div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Audience</div><div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{selectedMeeting.department || '—'}</div></div>
+            <div className="rounded-lg bg-[var(--bg-app)] p-4"><div className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Status</div><div className="mt-1"><Badge status={selectedMeeting.status} /></div></div>
+          </div>
+          <div><div className="text-sm font-semibold text-[var(--text-primary)]">Agenda</div><p className="mt-2 whitespace-pre-wrap text-sm text-[var(--text-secondary)]">{selectedMeeting.agenda || 'No agenda was added for this meeting.'}</p></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {selectedMeeting.meeting_link ? <div><div className="text-sm font-semibold text-[var(--text-primary)]">Meeting link</div><a href={selectedMeeting.meeting_link} target="_blank" rel="noreferrer" className="mt-2 inline-flex break-all text-sm font-medium text-[var(--brand-blue)] underline">Open online meeting</a></div> : null}
+            {selectedMeeting.location ? <div><div className="text-sm font-semibold text-[var(--text-primary)]">Location</div><p className="mt-2 text-sm text-[var(--text-secondary)]">{selectedMeeting.location}</p></div> : null}
+          </div>
+          <div><div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-[var(--text-primary)]">Attendees</div><span className="text-xs text-[var(--text-muted)]">{selectedMeeting.attendees?.length || 0} invited</span></div>{selectedMeeting.attendees?.length ? <div className="mt-3 flex flex-wrap gap-2">{selectedMeeting.attendees.map((attendee) => <span key={attendee.id} className="rounded-full border border-[var(--border-default)] px-3 py-1 text-xs text-[var(--text-secondary)]">{attendee.name}</span>)}</div> : <p className="mt-2 text-sm text-[var(--text-muted)]">No portal attendees were added.</p>}</div>
+          <div><div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-[var(--text-primary)]">Linked action items</div><button type="button" className="portal-button-secondary" onClick={() => { setMeetingFilter(String(selectedMeeting.id)); setActionForm((current) => ({ ...current, meeting_id: String(selectedMeeting.id) })); setWorkspaceTab('board'); setSelectedMeeting(null) }}>Open action board</button></div>{selectedMeeting.action_items?.length ? <div className="mt-3 space-y-2">{selectedMeeting.action_items.map((item) => <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-default)] px-3 py-2 text-sm"><span className="text-[var(--text-primary)]">{item.description}</span><Badge status={item.status} /></div>)}</div> : <p className="mt-2 text-sm text-[var(--text-muted)]">No action items are linked to this meeting yet.</p>}</div>
+        </div> : null}
+      </Modal>
       {canCreateMeeting ? <CreateMeetingModal isOpen={meetingModalOpen} onClose={() => setMeetingModalOpen(false)} onCreated={() => { refetchMeetings(); refetchActions() }} /> : null}
     </div>
   )
