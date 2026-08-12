@@ -1,9 +1,14 @@
 import axios from 'axios'
 
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim()
+export const apiBaseUrl = configuredApiUrl
+  ? `${/^https?:\/\//i.test(configuredApiUrl) ? '' : 'https://'}${configuredApiUrl.replace(/\/$/, '')}`
+  : ''
+
 export const api = axios.create({
   // Leave this empty when the frontend and API are served from the same origin.
-  // Set VITE_API_BASE_URL only when the API is hosted on a separate origin.
-  baseURL: import.meta.env.VITE_API_BASE_URL || '',
+  // Set VITE_API_URL only when the API is hosted on a separate origin.
+  baseURL: apiBaseUrl,
 })
 
 api.interceptors.request.use((config) => {

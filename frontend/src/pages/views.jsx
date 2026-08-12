@@ -29,6 +29,7 @@ class EmailButtonBlot extends BlockEmbed {
 Quill.register(DividerBlot)
 Quill.register(EmailButtonBlot)
 import axios from "axios";
+import { apiBaseUrl } from '../api/axios.js'
 import { jsPDF } from 'jspdf'
 import { format, parseISO } from 'date-fns'
 import {
@@ -2190,7 +2191,7 @@ export function PortalManagementView() {
                       { id: 'students', title: 'Students & Guardians', description: 'Creates each student and links one or two guardians.' },
                       { id: 'teachers', title: 'Teachers', description: 'Creates teacher accounts and optionally marks head teachers.' },
                       { id: 'staff', title: 'Staff', description: 'Creates staff accounts and assigns their department.' },
-                    ].map((template) => <label key={template.id} className={`cursor-pointer rounded-xl border p-4 transition ${importType === template.id ? 'border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 ring-1 ring-[var(--brand-blue)]' : 'border-[var(--border-default)] hover:border-[var(--brand-blue)]'}`}><input className="sr-only" type="radio" name="import-type" value={template.id} checked={importType === template.id} onChange={() => { setImportType(template.id); setImportErrors([]) }} /><span className="block text-sm font-semibold text-[var(--text-primary)]">{template.title}</span><span className="mt-1 block text-xs text-[var(--text-secondary)]">{template.description}</span><a className="mt-3 inline-flex text-xs font-medium text-[var(--brand-navy)] underline" href={`${import.meta.env.VITE_API_BASE_URL || ''}/api/users/templates/${template.id}.xlsx`} onClick={(event) => event.stopPropagation()}>Download template</a></label>)}
+                    ].map((template) => <label key={template.id} className={`cursor-pointer rounded-xl border p-4 transition ${importType === template.id ? 'border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 ring-1 ring-[var(--brand-blue)]' : 'border-[var(--border-default)] hover:border-[var(--brand-blue)]'}`}><input className="sr-only" type="radio" name="import-type" value={template.id} checked={importType === template.id} onChange={() => { setImportType(template.id); setImportErrors([]) }} /><span className="block text-sm font-semibold text-[var(--text-primary)]">{template.title}</span><span className="mt-1 block text-xs text-[var(--text-secondary)]">{template.description}</span><a className="mt-3 inline-flex text-xs font-medium text-[var(--brand-navy)] underline" href={`${apiBaseUrl}/api/users/templates/${template.id}.xlsx`} onClick={(event) => event.stopPropagation()}>Download template</a></label>)}
                   </div>
                   <div className="rounded-lg bg-[var(--bg-app)] p-3 text-xs text-[var(--text-secondary)]"><strong className="text-[var(--text-primary)]">Password options:</strong> leave password cells blank to generate secure temporary passwords automatically, or provide a 12+ character strong password. Credentials are emailed to newly created accounts.</div>
                   <input type="file" accept=".xlsx,.xls" className="portal-input" onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportErrors([]) }} />
