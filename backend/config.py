@@ -23,6 +23,7 @@ class Settings:
     secret_key: str = os.getenv('SECRET_KEY', 'bridge-school-secret')
     algorithm: str = os.getenv('ALGORITHM', 'HS256')
     access_token_expire_minutes: int = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '60'))
+    app_timezone: str = os.getenv('APP_TIMEZONE', 'Asia/Karachi')
     demo_password: str = os.getenv('DEMO_PASSWORD', 'password123')
     gmail_client_id: str = os.getenv('GMAIL_CLIENT_ID', '')
     gmail_client_secret: str = os.getenv('GMAIL_CLIENT_SECRET', '')
@@ -34,6 +35,9 @@ class Settings:
     twilio_whatsapp_reminder_content_sid: str = os.getenv('TWILIO_WHATSAPP_REMINDER_CONTENT_SID', '')
     gemini_api_key: str = os.getenv('GEMINI_API_KEY', '')
     gemini_model: str = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
+    vapid_public_key: str = os.getenv('VAPID_PUBLIC_KEY', '')
+    vapid_private_key: str = os.getenv('VAPID_PRIVATE_KEY', '')
+    vapid_subject: str = os.getenv('VAPID_SUBJECT', 'mailto:admin@bridge.school')
 
     @staticmethod
     def _resolve_ssl_ca(value: str) -> str:

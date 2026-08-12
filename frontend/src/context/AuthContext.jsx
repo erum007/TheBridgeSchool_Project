@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 import { authApi } from '../api/auth.js'
+import { browserPushSupported, registerBrowserPush } from '../utils/webPush.js'
 
 const AuthContext = createContext(null)
 
@@ -58,6 +59,11 @@ export function AuthProvider({ children }) {
     setUser(nextUser)
     window.localStorage.setItem(tokenKey, nextToken)
     window.localStorage.setItem(userKey, JSON.stringify(nextUser))
+    // A push subscription belongs to this browser profile. Re-associate it on
+    // every login so a shared browser only delivers to the latest account.
+    if (browserPushSupported() && Notification.permission === 'granted') {
+      registerBrowserPush().catch(() => {})
+    }
     return nextUser
   }
 

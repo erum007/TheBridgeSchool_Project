@@ -6,7 +6,17 @@ import { useApi } from '../../hooks/useApi.js'
 import Modal from './Modal.jsx'
 import UserSearchSelect from './UserSearchSelect.jsx'
 
-const departments = ['Academic', 'Operations', 'Admissions', 'Student Affairs', 'Finance', 'Custom']
+const audiences = [
+  { value: 'Academic', label: 'Academic department' },
+  { value: 'Operations', label: 'Operations department' },
+  { value: 'Admissions', label: 'Admissions department' },
+  { value: 'Student Affairs', label: 'Student Affairs department' },
+  { value: 'Finance', label: 'Finance department' },
+  { value: 'teachers', label: 'All Teachers' },
+  { value: 'staff', label: 'All Staff' },
+  { value: 'all', label: 'Everyone' },
+  { value: 'Custom', label: 'Custom audience' },
+]
 const emptyForm = {
   title: '', agenda: '', scheduled_at: '', department: 'Academic', audience_departments: [], attendee_ids: [], external_emails: [],
   end_time: '',
@@ -71,7 +81,13 @@ export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
     }
   }
 
-  const departmentMemberCount = users.filter((user) => user.departments?.includes(form.department) && user.is_active).length
+  const audienceMemberCount = users.filter((user) => {
+    if (!user.is_active) return false
+    if (form.department === 'teachers') return user.role === 'teacher'
+    if (form.department === 'staff') return user.role === 'staff'
+    if (form.department === 'all') return true
+    return user.departments?.includes(form.department)
+  }).length
   const externalEmailsText = form.external_emails.join('\n')
 
   return (
@@ -100,11 +116,11 @@ export default function CreateMeetingModal({ isOpen, onClose, onCreated }) {
           <input required type="datetime-local" min={form.scheduled_at > minimumDateTime ? form.scheduled_at : minimumDateTime} className="portal-input mt-1" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} />
         </div>
         <div>
-          <label className="portal-label block">Department / audience</label>
+          <label className="portal-label block">Invite audience</label>
           <select className="portal-input mt-1" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value, audience_departments: [], attendee_ids: [], external_emails: [] })}>
-            {departments.map((department) => <option key={department}>{department}</option>)}
+            {audiences.map((audience) => <option key={audience.value} value={audience.value}>{audience.label}</option>)}
           </select>
-          {form.department !== 'Custom' ? <p className="mt-2 text-xs text-[var(--text-muted)]">All {departmentMemberCount} active member{departmentMemberCount === 1 ? '' : 's'} of this department will be invited.</p> : null}
+          {form.department !== 'Custom' ? <p className="mt-2 text-xs text-[var(--text-muted)]">All {audienceMemberCount} active recipient{audienceMemberCount === 1 ? '' : 's'} in this audience will be invited.</p> : null}
         </div>
         {form.department === 'Custom' ? (
           <div className="md:col-span-2 rounded-xl border border-[var(--border-default)] bg-[var(--bg-app)] p-4">

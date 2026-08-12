@@ -71,14 +71,16 @@ export default function KanbanBoard({ columns, onStatusChange, pendingStatusItem
                             </div>
                           </div>
                           <div className="ml-auto flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => onSendReminderNow?.(item.id)}
-                              disabled={Boolean(pendingReminderIds[String(item.id)]) || Boolean(cooldownReminderIds[String(item.id)])}
-                              className="shrink-0 whitespace-nowrap rounded-md border border-[var(--brand-blue)] px-2 py-1 text-[10px] font-semibold leading-none text-[var(--brand-blue)] transition-colors hover:bg-[rgba(27,43,107,0.06)] disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {pendingReminderIds[String(item.id)] ? 'Sending…' : cooldownReminderIds[String(item.id)] ? 'Sent' : 'Remind'}
-                            </button>
+                            {item.status !== 'done' ? (
+                              <button
+                                type="button"
+                                onClick={() => onSendReminderNow?.(item.id)}
+                                disabled={Boolean(pendingReminderIds[String(item.id)]) || Boolean(cooldownReminderIds[String(item.id)])}
+                                className="shrink-0 whitespace-nowrap rounded-md border border-[var(--brand-blue)] px-2 py-1 text-[10px] font-semibold leading-none text-[var(--brand-blue)] transition-colors hover:bg-[rgba(27,43,107,0.06)] disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {pendingReminderIds[String(item.id)] ? 'Sending…' : cooldownReminderIds[String(item.id)] ? 'Sent' : 'Remind'}
+                              </button>
+                            ) : null}
                             {item.dueDate ? <span className="whitespace-nowrap text-xs text-[var(--text-muted)]">Due {item.dueDate}</span> : null}
                           </div>
                         </div>

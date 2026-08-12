@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from ..database import SessionLocal
+from ..config import settings
 from ..models import ActionItem, ActionItemEmailReminder, ActionItemStatus, User
 from .email_service import send_plain_email
 from .notification_service import create_notification, notification_link
@@ -21,10 +23,20 @@ logger = logging.getLogger(__name__)
 def parse_run_at(value: str | None) -> datetime:
     if not value:
         raise ValueError('A reminder date and time is required')
-    run_at = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    try:
+        run_at = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError as exc:
+        raise ValueError('Reminder date and time is invalid') from exc
     if run_at.tzinfo is None:
-        run_at = run_at.replace(tzinfo=timezone.utc)
-    return run_at.astimezone(timezone.utc)
+        # datetime-local inputs have no offset. Interpret legacy/direct API
+        # values in the configured school time zone rather than UTC.
+        try:
+            run_at = run_at.replace(tzinfo=ZoneInfo(settings.app_timezone))
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError('The configured application time zone is invalid') from exc
+    # The database stores timestamps without time-zone information; persist a
+    # naive UTC value so it has the same meaning with MySQL and SQLite.
+    return run_at.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def reminder_job_id(reminder_id: int) -> str:
@@ -115,9 +127,9 @@ def _deliver_reminder_from_action_item(db, action_item, reminder=None, reminder_
         assignee = getattr(action_item, 'assigned_to_user', None)
     if not assignee:
         assignee = getattr(action_item, 'assignee', None)
-    if not assignee or not getattr(assignee, 'email', None):
-        logger.warning('Skipping reminder %s because assignee %s has no email address', reminder_id, action_item.assigned_to)
-        return False, 'Assignee has no email address.'
+    if not assignee:
+        logger.warning('Skipping reminder %s because action item %s has no assignee', reminder_id, action_item.id)
+        return False, 'Action item has no assignee.'
 
     create_notification(
         db,
@@ -125,27 +137,32 @@ def _deliver_reminder_from_action_item(db, action_item, reminder=None, reminder_
         'Action item reminder',
         f'Reminder: {action_item.description}',
         'action_reminder',
-        notification_link(assignee.role, '/meetings?tab=board'),
+        notification_link(getattr(assignee, 'role', None), '/meetings?tab=board'),
     )
     # In-app reminders are delivered independently of email availability.
     db.commit()
-
-    subject, body, html_body = _build_reminder_email(
-        assignee.name,
-        action_item.description,
-        action_item.due_date,
-    )
-    sent = send_plain_email(assignee.email, subject, body, html_body=html_body)
-    if not sent:
-        logger.warning('Reminder email %s could not be sent to %s', reminder_id, assignee.email)
-        return False, 'Email delivery failed.'
 
     if reminder is not None:
         reminder.last_sent_at = datetime.now(timezone.utc)
         if reminder.frequency == 'custom':
             reminder.is_active = False
         db.commit()
-    return True, 'Reminder email sent successfully.'
+
+    email = getattr(assignee, 'email', None)
+    if not email:
+        logger.warning('Reminder email %s was skipped because assignee %s has no email address', reminder_id, assignee.id)
+        return True, 'In-app and device reminder sent; assignee has no email address.'
+
+    subject, body, html_body = _build_reminder_email(
+        assignee.name,
+        action_item.description,
+        action_item.due_date,
+    )
+    sent = send_plain_email(email, subject, body, html_body=html_body)
+    if not sent:
+        logger.warning('Reminder email %s could not be sent to %s', reminder_id, email)
+        return True, 'In-app and device reminder sent; email delivery failed.'
+    return True, 'Reminder sent by email, in-app, and to subscribed devices.'
 
 
 def _deliver_reminder(reminder_id: int) -> None:
@@ -186,14 +203,30 @@ def schedule_reminder(reminder: ActionItemEmailReminder) -> None:
     run_at = reminder.run_at
     if run_at.tzinfo is None:
         run_at = run_at.replace(tzinfo=timezone.utc)
+    else:
+        run_at = run_at.astimezone(timezone.utc)
+    now = datetime.now(timezone.utc)
+    first_run_at = max(run_at, now)
     if reminder.frequency == 'custom':
-        if run_at <= datetime.now(timezone.utc):
-            return
-        trigger = DateTrigger(run_date=run_at)
+        # Do not lose a one-time reminder if the API process starts a few
+        # seconds after its selected time. It will run immediately once.
+        trigger = DateTrigger(run_date=first_run_at)
     else:
         kwargs = {'hourly': {'hours': 1}, 'daily': {'days': 1}, 'weekly': {'weeks': 1}}[reminder.frequency]
         trigger = IntervalTrigger(start_date=run_at, timezone='UTC', **kwargs)
-    scheduler_instance.add_job(_deliver_reminder, trigger, args=[reminder.id], id=reminder_job_id(reminder.id), replace_existing=True)
+    scheduler_instance.add_job(
+        _deliver_reminder,
+        trigger,
+        args=[reminder.id],
+        id=reminder_job_id(reminder.id),
+        replace_existing=True,
+        next_run_time=first_run_at,
+        # Explicit here as well, so the important reliability guarantees stay
+        # with this reminder even if scheduler defaults change later.
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+    )
 
 
 def restore_reminders() -> None:

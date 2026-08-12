@@ -42,6 +42,7 @@ from .routers import (
     meetings_router,
     notices_router,
     notifications_router,
+    push_router,
     opportunities_router,
     results_router,
     users_router,
@@ -85,6 +86,7 @@ app.include_router(emails_router)
 app.include_router(results_router)
 app.include_router(notices_router)
 app.include_router(notifications_router)
+app.include_router(push_router)
 app.include_router(opportunities_router)
 app.include_router(whatsapp_router)
 app.include_router(dashboard_router)

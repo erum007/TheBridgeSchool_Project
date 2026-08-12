@@ -7,6 +7,7 @@ from .emails import restore_scheduled_emails, router as emails_router
 from .meetings import router as meetings_router
 from .notices import router as notices_router
 from .notifications import router as notifications_router
+from .push import router as push_router
 from .opportunities import router as opportunities_router
 from .results import router as results_router
 from .users import router as users_router
