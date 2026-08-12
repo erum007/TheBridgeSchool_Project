@@ -60,6 +60,8 @@ import { usersApi } from '../api/users.js'
 import { authApi } from '../api/auth.js'
 import { departmentsApi } from '../api/departments.js'
 import { whatsappApi } from '../api/whatsapp.js'
+import { browserPushSupported, registerBrowserPush } from '../utils/webPush.js'
+import { pushApi } from '../api/push.js'
 
 import Badge from '../components/shared/Badge.jsx'
 import EmptyState from '../components/shared/EmptyState.jsx'
@@ -409,7 +411,14 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
       return
     }
     try {
-      await actionItemsApi.create({ ...actionForm, description: actionForm.description.trim() })
+      await actionItemsApi.create({
+        ...actionForm,
+        description: actionForm.description.trim(),
+        // datetime-local is deliberately timezone-free. Convert it before it
+        // leaves the browser so the backend schedules the exact local time
+        // the user selected.
+        email_reminder_at: actionForm.email_reminder_at ? new Date(actionForm.email_reminder_at).toISOString() : '',
+      })
       setActionForm({ meeting_id: '', description: '', assigned_to: '', due_date: '', email_reminder_frequency: 'none', email_reminder_at: '' })
       setAssigneeSearch('')
       setAssigneePickerOpen(false)
@@ -564,11 +573,11 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                     placeholder="Search staff or teacher to assign..."
                   />
                   <select className="portal-input" value={actionForm.email_reminder_frequency} onChange={(event) => setActionForm({ ...actionForm, email_reminder_frequency: event.target.value })}>
-                    <option value="none">No email reminder</option>
-                    <option value="hourly">Email: hourly</option>
-                    <option value="daily">Email: daily</option>
-                    <option value="weekly">Email: weekly</option>
-                    <option value="custom">Email: once at custom time</option>
+                    <option value="none">No reminder</option>
+                    <option value="hourly">Remind hourly</option>
+                    <option value="daily">Remind daily</option>
+                    <option value="weekly">Remind weekly</option>
+                    <option value="custom">Remind once at a custom time</option>
                   </select>
                   <div className="flex flex-col gap-2">
                     <label className="portal-label block">Action due date</label>
@@ -579,11 +588,11 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                     <div className="lg:col-span-2">
                       <label className="portal-label block">When should the first reminder be sent?</label>
                       <input type="datetime-local" min={futureDateTimeInputValue()} required className="portal-input mt-1" value={actionForm.email_reminder_at} onChange={(event) => setActionForm({ ...actionForm, email_reminder_at: event.target.value })} />
-                      <p className="mt-2 text-xs text-[var(--text-muted)]">This is separate from the action due date. The reminder time controls when the first email is sent, while the due date controls the task deadline.</p>
+                      <p className="mt-2 text-xs text-[var(--text-muted)]">This is separate from the action due date. The selected time controls the first reminder, while the due date controls the task deadline.</p>
                     </div>
                   ) : null}
                   {actionForm.email_reminder_frequency !== 'none' ? (
-                    <p className="lg:col-span-2 text-xs text-[var(--text-muted)]">Reminders are sent to the assignee&apos;s registered email address and stop once the action item is marked done.</p>
+                    <p className="lg:col-span-2 text-xs text-[var(--text-muted)]">Each reminder creates an in-app notification, sends an email, and sends a browser notification to subscribed devices. It stops once the action item is marked done.</p>
                   ) : null}
                 </form> : null}
               </div>
@@ -2517,6 +2526,7 @@ export function SettingsView({ titlePrefix = '' }) {
   const [emailChangeStep, setEmailChangeStep] = useState('request')
   const [profilePicture, setProfilePicture] = useState('')
   const [emailEnabled, setEmailEnabled] = useState(user?.email_notifications_enabled ?? true)
+  const [pushStatus, setPushStatus] = useState(() => browserPushSupported() ? Notification.permission : 'unsupported')
   const [passwordForm, setPasswordForm] = useState({ otp: '', new_password: '', confirm_password: '' })
   const [passwordCodeSent, setPasswordCodeSent] = useState(false)
 
@@ -2598,6 +2608,29 @@ export function SettingsView({ titlePrefix = '' }) {
     }
   }
 
+  const enableDeviceNotifications = async () => {
+    if (!browserPushSupported()) return toast.error('This browser does not support device notifications')
+    if (Notification.permission === 'denied') return toast.error('Device notifications are blocked. Enable them in your browser site settings first.')
+    try {
+      const permission = await Notification.requestPermission()
+      setPushStatus(permission)
+      if (permission !== 'granted') return toast.error('Device notification permission was not granted')
+      await registerBrowserPush()
+      toast.success('This browser will now receive device notifications for your account')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not enable device notifications')
+    }
+  }
+
+  const sendDeviceNotificationTest = async () => {
+    try {
+      const response = await pushApi.sendTest()
+      toast.success(response?.data?.detail || 'Test device notification sent')
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Could not send a test device notification')
+    }
+  }
+
   const requestPasswordCode = async () => {
     try {
       await authApi.requestPasswordChange()
@@ -2672,6 +2705,11 @@ export function SettingsView({ titlePrefix = '' }) {
             <label className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-default)] p-3"><span><span className="block font-medium">Email notifications</span><span className="text-xs text-[var(--text-muted)]">Meeting invitations, reminders, and important updates.</span></span><input type="checkbox" checked={emailEnabled} onChange={(event) => setEmailEnabled(event.target.checked)} /></label>
             <button type="button" className="portal-button-primary" onClick={savePreferences}>Save preferences</button>
           </div>
+        </div>
+        <div className="portal-panel">
+          <div className="text-sm font-semibold text-[var(--text-primary)]">Device notifications</div><p className="mt-1 text-sm text-[var(--text-secondary)]">Receive meeting, action-item, result, and notice alerts from this browser, even when the portal is not open.</p>
+          <div className="mt-4 flex flex-wrap items-center gap-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${pushStatus === 'granted' ? 'bg-emerald-50 text-emerald-700' : 'bg-[var(--bg-app)] text-[var(--text-secondary)]'}`}>{pushStatus === 'granted' ? 'Enabled on this browser' : pushStatus === 'denied' ? 'Blocked in browser settings' : pushStatus === 'unsupported' ? 'Not supported' : 'Not enabled'}</span><button type="button" className="portal-button-secondary" onClick={enableDeviceNotifications} disabled={pushStatus === 'granted' || pushStatus === 'unsupported'}>{pushStatus === 'granted' ? 'Device notifications enabled' : 'Enable device notifications'}</button>{pushStatus === 'granted' ? <button type="button" className="portal-button-secondary" onClick={sendDeviceNotificationTest}>Send test notification</button> : null}</div>
+          <p className="mt-3 text-xs text-[var(--text-muted)]">On a shared browser, the most recently signed-in account becomes the only account connected to that browser. Avoid enabling device notifications on public computers.</p>
         </div>
         <div className="portal-panel">
           <div className="text-sm font-medium text-[var(--text-primary)]">Change Password</div>

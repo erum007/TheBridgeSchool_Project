@@ -119,11 +119,12 @@ def test_send_manual_reminder_uses_existing_delivery_flow():
     assignee = action_item.assigned_to_user
 
     with patch('backend.services.action_item_email_reminder_service.send_plain_email', return_value=True) as mock_send, \
+         patch('backend.services.action_item_email_reminder_service.create_notification'), \
          patch('backend.services.action_item_email_reminder_service.SessionLocal') as mock_session_factory:
         db = SimpleNamespace(get=lambda model, ident=None: {
             ActionItem: action_item,
             User: assignee,
-        }.get(model, None))
+        }.get(model, None), commit=lambda: None, close=lambda: None)
         mock_session_factory.return_value = db
 
         sent, message = send_manual_reminder(action_item.id)

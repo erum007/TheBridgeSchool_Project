@@ -66,6 +66,12 @@ def _resolve_audience(db: Session, payload: MeetingCreate) -> list[User]:
         if not conditions:
             return []
         return db.query(User).filter(User.is_active == True, or_(*conditions)).all()
+    if payload.department == 'teachers':
+        return db.query(User).filter(User.is_active == True, User.role == UserRole.teacher).all()
+    if payload.department == 'staff':
+        return db.query(User).filter(User.is_active == True, User.role == UserRole.staff).all()
+    if payload.department == 'all':
+        return db.query(User).filter(User.is_active == True).all()
     return db.query(User).filter(User.is_active == True, User.departments.any(Department.name == payload.department)).all()
 
 
