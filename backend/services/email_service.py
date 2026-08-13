@@ -210,7 +210,9 @@ def send_plain_email(
             except OSError:
                 logger.warning("Email attachment is unavailable: %s", path)
         if api_attachments:
-            payload["attachments"] = api_attachments
+            # Brevo's transactional email API names this array `attachment`
+            # (singular), even when multiple files are included.
+            payload["attachment"] = api_attachments
 
         request = Request(
             "https://api.brevo.com/v3/smtp/email",
