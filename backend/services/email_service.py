@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import logging
+import base64
+import json
 import mimetypes
 import os
 import re
 import smtplib
 from pathlib import Path
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 from datetime import datetime, timezone
 from collections import defaultdict
 from datetime import date, datetime, timezone
@@ -169,13 +173,70 @@ def send_plain_email(
 ) -> bool:
     logger.info("[reminder-debug] send_plain_email entered for %s", to_email)
     """
-    Sends an email through Gmail SMTP.
+    Sends through Brevo's HTTPS API in production, or Gmail SMTP as a fallback.
 
     If html_body is supplied, the recipient receives a proper HTML email
     while plain-text clients fall back to 'body'.
     """
+    if settings.brevo_api_key:
+        if not settings.brevo_sender_email:
+            logger.error("BREVO_SENDER_EMAIL is required when BREVO_API_KEY is configured")
+            return False
+
+        rendered_html = _inline_quill_styles(html_body) if html_body else None
+        payload = {
+            "sender": {
+                "email": settings.brevo_sender_email,
+                "name": settings.brevo_sender_name,
+            },
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "textContent": body or "Please view this email in an HTML-compatible email client.",
+        }
+        if rendered_html:
+            payload["htmlContent"] = rendered_html
+        reply_to = settings.brevo_reply_to or settings.gmail_sender
+        if reply_to:
+            payload["replyTo"] = {"email": reply_to}
+
+        api_attachments = []
+        for path, filename in attachments or []:
+            try:
+                with open(path, "rb") as attachment_file:
+                    api_attachments.append({
+                        "filename": filename,
+                        "content": base64.b64encode(attachment_file.read()).decode("ascii"),
+                    })
+            except OSError:
+                logger.warning("Email attachment is unavailable: %s", path)
+        if api_attachments:
+            payload["attachments"] = api_attachments
+
+        request = Request(
+            "https://api.brevo.com/v3/smtp/email",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "api-key": settings.brevo_api_key,
+                "Content-Type": "application/json",
+                "User-Agent": "bridge-school-portal/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=30) as response:
+                if 200 <= response.status < 300:
+                    logger.info("Email accepted by Brevo for %s", to_email)
+                    return True
+                logger.error("Brevo returned HTTP %s for %s", response.status, to_email)
+        except HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            logger.error("Brevo rejected email to %s (HTTP %s): %s", to_email, exc.code, error_body)
+        except (URLError, TimeoutError, OSError):
+            logger.exception("Failed to reach Brevo for %s", to_email)
+        return False
+
     if not settings.gmail_sender or not settings.gmail_app_password:
-        logger.warning("Gmail sender or app password is not configured")
+        logger.warning("Email is not configured: set Brevo or Gmail credentials")
         return False
 
     message = EmailMessage()

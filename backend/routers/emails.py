@@ -247,14 +247,22 @@ def send_email(payload: EmailSendRequest, db: Session = Depends(get_db), current
         _schedule_delivery(email_record.id, email_record.scheduled_at)
     else:
         recipients = _resolve_recipients(db, payload.recipient_group)
+        failed_recipients = []
         for to_email in recipients:
             recipient = db.query(User).filter(User.email == to_email).first()
-            send_plain_email(
+            sent = send_plain_email(
                 to_email=to_email,
                 subject=_render_variables(payload.subject, to_email, recipient),
                 body="Please view this email in an HTML-compatible email client.",
                 html_body=_with_preheader(_render_variables(payload.body, to_email, recipient), _render_variables(payload.preheader or '', to_email, recipient)),
                 attachments=_attachment_files(payload.attachments),
+            )
+            if not sent:
+                failed_recipients.append(to_email)
+        if failed_recipients:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f'Email delivery failed for {len(failed_recipients)} recipient(s). Check backend logs.',
             )
         email_record.status = EmailStatus.sent
         email_record.sent_at = datetime.now(timezone.utc)
