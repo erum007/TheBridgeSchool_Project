@@ -204,7 +204,7 @@ def send_plain_email(
             try:
                 with open(path, "rb") as attachment_file:
                     api_attachments.append({
-                        "filename": filename,
+                        "name": filename,
                         "content": base64.b64encode(attachment_file.read()).decode("ascii"),
                     })
             except OSError:
