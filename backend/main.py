@@ -240,6 +240,11 @@ def on_startup() -> None:
         'configured' if settings.gemini_api_key else 'missing',
         settings.gemini_model,
     )
+    logger.info(
+        'Web push configuration: VAPID keys %s; subject=%s',
+        'configured' if settings.vapid_public_key and settings.vapid_private_key else 'missing',
+        settings.vapid_subject,
+    )
     Base.metadata.create_all(bind=engine)
     apply_additive_schema_updates(engine)
     ensure_scheduler_started()
