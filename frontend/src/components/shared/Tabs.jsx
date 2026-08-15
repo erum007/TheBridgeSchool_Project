@@ -38,7 +38,12 @@ export default function Tabs({ tabs, defaultTab, activeTab: controlledActiveTab,
               onClick={() => selectTab(tab.id)}
               className={`relative px-4 py-2.5 font-display text-sm font-medium transition-colors duration-150 ${activeTab === tab.id ? 'text-[var(--brand-navy)]' : 'text-[var(--text-muted)] hover:text-[var(--brand-navy)]'}`}
             >
-              {tab.label}
+              {tab.mobileLabel ? (
+                <>
+                  <span className="sm:hidden">{tab.mobileLabel}</span>
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </>
+              ) : tab.label}
             </button>
           ))}
         </div>

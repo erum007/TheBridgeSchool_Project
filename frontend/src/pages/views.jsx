@@ -1067,6 +1067,7 @@ export function EmailModuleView() {
           {
             id: 'dashboard',
             label: 'Email Dashboard',
+            mobileLabel: 'Dashboard',
             content: (
               <div className="space-y-6">
                 <div className="grid gap-6 lg:grid-cols-2">
@@ -1119,6 +1120,7 @@ export function EmailModuleView() {
           {
             id: 'compose',
             label: 'Compose & Schedule',
+            mobileLabel: 'Compose',
             content: (
               <form className="grid gap-4 portal-panel lg:grid-cols-2" onSubmit={submitCompose}>
                 <div>
@@ -1224,6 +1226,7 @@ export function EmailModuleView() {
           {
             id: 'templates',
             label: 'Email Templates',
+            mobileLabel: 'Templates',
             content: (
               <div className="grid gap-6 lg:grid-cols-[minmax(0,9fr)_minmax(360px,11fr)]">
                 <input className="portal-input w-full" placeholder="Search templates…" value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} />
