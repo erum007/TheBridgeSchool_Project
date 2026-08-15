@@ -286,6 +286,16 @@ input[type='checkbox'] {
 @media (max-width: 639px) {
   .email-module {
     border-radius: 0.75rem;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .email-module section,
+  .email-module form,
+  .email-module-tabs,
+  .email-module-tabs > div:last-child {
+    min-width: 0;
+    max-width: 100%;
   }
 
   .email-module .portal-panel {
@@ -344,6 +354,20 @@ input[type='checkbox'] {
 
   .email-module table {
     min-width: 34rem;
+  }
+
+  .email-module section > div,
+  .email-module .min-w-0 > div {
+    max-width: 100%;
+  }
+
+  .email-module section > .overflow-x-auto,
+  .email-module .min-w-0 > .overflow-x-auto {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .email-preview-content table {
