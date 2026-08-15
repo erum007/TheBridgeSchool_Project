@@ -48,13 +48,6 @@ class NoticeRecipients(str, Enum):
     department = 'department'
 
 
-class WhatsAppStatus(str, Enum):
-    sent = 'sent'
-    delivered = 'delivered'
-    read = 'read'
-    failed = 'failed'
-
-
 meeting_attendees = Table(
     'meeting_attendees',
     Base.metadata,

@@ -13,17 +13,14 @@ class UserCreate(ORMBaseModel):
     password: str = Field(min_length=12)
     role: str = Field(min_length=1)
     head_teacher: bool = False
-    whatsapp_number: Optional[str] = None
     department: Optional[str] = None
     is_active: bool = True
 
 
 class UserUpdateSettings(ORMBaseModel):
     name: Optional[str] = None
-    whatsapp_number: Optional[str] = None
     profile_picture_url: Optional[str] = None
     email_notifications_enabled: Optional[bool] = None
-    whatsapp_notifications_enabled: Optional[bool] = None
 
 
 class UserAdminUpdate(ORMBaseModel):
@@ -62,7 +59,6 @@ class UserRead(ORMBaseModel):
     email: str
     role: str
     head_teacher: bool
-    whatsapp_number: Optional[str] = None
     department: Optional[str] = None
     is_active: bool
     created_at: str

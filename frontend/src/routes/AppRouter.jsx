@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import ProtectedRoute from '../components/layout/ProtectedRoute.jsx'
 import LoginPage, { ResetPasswordPage } from '../pages/auth/LoginPage.jsx'
 import NotificationsPage from '../pages/NotificationsPage.jsx'
-import { AdminDashboardView, EmailModuleView, MeetingWorkspaceView, PerformanceBroadcasterView, PortalManagementView, TeacherDashboardView, WhatsAppAlertsView, StudentHomeView, StudentProgressView, StudentResultHistoryView, NoticeBoardView, OpportunityBoardView, SettingsView } from '../pages/views.jsx'
+import { AdminDashboardView, EmailModuleView, MeetingWorkspaceView, PerformanceBroadcasterView, PortalManagementView, TeacherDashboardView, StudentHomeView, StudentProgressView, StudentResultHistoryView, NoticeBoardView, OpportunityBoardView, SettingsView } from '../pages/views.jsx'
 
 function RoleRedirect() {
   const { user } = useAuth()
@@ -38,7 +38,6 @@ export default function AppRouter() {
       <Route path="/admin/meetings" element={<ProtectedRoute roles={[ 'admin' ]}><MeetingWorkspaceView canCreateMeeting /></ProtectedRoute>} />
       <Route path="/admin/email" element={<ProtectedRoute roles={[ 'admin' ]}><EmailModuleView /></ProtectedRoute>} />
       <Route path="/admin/results" element={<ProtectedRoute roles={[ 'admin' ]}><PerformanceBroadcasterView /></ProtectedRoute>} />
-      <Route path="/admin/whatsapp" element={<ProtectedRoute roles={[ 'admin' ]}><WhatsAppAlertsView /></ProtectedRoute>} />
       <Route path="/admin/portal" element={<ProtectedRoute roles={[ 'admin' ]}><PortalManagementView /></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute roles={[ 'admin' ]}><SettingsView /></ProtectedRoute>} />
       <Route path="/admin/notifications" element={<ProtectedRoute roles={[ 'admin' ]}><NotificationsPage /></ProtectedRoute>} />

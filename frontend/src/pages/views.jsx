@@ -60,7 +60,6 @@ import { opportunitiesApi } from '../api/opportunities.js'
 import { usersApi } from '../api/users.js'
 import { authApi } from '../api/auth.js'
 import { departmentsApi } from '../api/departments.js'
-import { whatsappApi } from '../api/whatsapp.js'
 import { browserPushSupported, registerBrowserPush } from '../utils/webPush.js'
 import { pushApi } from '../api/push.js'
 
@@ -1574,7 +1573,7 @@ export function PerformanceBroadcasterView() {
           <button type="button" className="text-left text-xs text-[var(--brand-red)] hover:underline cursor-pointer" onClick={downloadSampleTemplate}>↓ Download sample CSV template</button>
           <label className="flex items-center gap-3 text-sm text-[var(--text-primary)]">
             <input type="checkbox" checked={form.notify} onChange={(event) => setForm({ ...form, notify: event.target.checked })} />
-            Notify parents via email and WhatsApp
+            Notify parents via email
           </label>
           <button type="submit" className="portal-button-primary w-full">Upload & Broadcast</button>
         </form>
@@ -1625,102 +1624,6 @@ export function PerformanceBroadcasterView() {
               <div className="text-center py-6 text-xs text-[var(--text-muted)]">No uploads match the selected filters.</div>
             ) : null}
             {resultsLoading ? <SkeletonList count={3} /> : !uploads.length ? <EmptyState title="No uploads yet" message="Broadcast result sheets to see recent batches here." /> : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export function WhatsAppAlertsView() {
-  const { user } = useAuth()
-  const { data: logs = [], loading: logsLoading, refetch } = useApi(() => whatsappApi.logs(), [])
-  const [connected, setConnected] = useState(true)
-  const [form, setForm] = useState({ recipient_name: '', phone_number: '', message: '', recipient_group: 'parents' })
-
-  const submit = async (event) => {
-    event.preventDefault()
-    try {
-      await whatsappApi.send(form)
-      toast.success('WhatsApp message sent')
-      setForm({ recipient_name: '', phone_number: '', message: '', recipient_group: 'parents' })
-      refetch()
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || 'Could not send WhatsApp message')
-    }
-  }
-
-  return (
-    <div>
-      <PageHeader title="WhatsApp Notifications" subtitle="Broadcast alerts to parents and students." />
-      <div className="grid gap-6 lg:grid-cols-[420px_minmax(0,1fr)]">
-        <div className="space-y-6">
-          <div className="portal-panel">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-[var(--text-primary)]">Gateway Settings</div>
-                <div className="text-sm text-[var(--text-secondary)]">{connected ? 'Connected gateway ready to send.' : 'Disconnected from gateway.'}</div>
-              </div>
-              <Badge status={connected ? 'connected' : 'failed'} />
-            </div>
-            <div className="mt-4 rounded-lg border border-[var(--border-default)] bg-[var(--bg-app)] p-4 text-sm text-[var(--text-secondary)]">
-              <div>Sending as: {user?.whatsapp_number || '+44 0000 000000'}</div>
-            </div>
-            <button type="button" className="portal-button-secondary mt-4" onClick={() => setConnected((value) => !value)}>
-              {connected ? 'Disconnect' : 'Connect'}
-            </button>
-          </div>
-          <form className="space-y-4 portal-panel" onSubmit={submit}>
-            <div>
-              <label className="portal-label block">Recipient group</label>
-              <select className="portal-input mt-1" value={form.recipient_group} onChange={(event) => setForm({ ...form, recipient_group: event.target.value })}>
-                <option value="parents">Parents</option>
-                <option value="students">Students</option>
-                <option value="teachers">Teachers</option>
-                <option value="all">All</option>
-              </select>
-            </div>
-            <div>
-              <label className="portal-label block">Message</label>
-              <textarea className="portal-input mt-1 min-h-40" value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} />
-              <div className="mt-2 text-xs text-[var(--text-muted)]">{form.message.length} characters</div>
-            </div>
-            <div>
-              <label className="portal-label block">Recipient name</label>
-              <input className="portal-input mt-1" value={form.recipient_name} onChange={(event) => setForm({ ...form, recipient_name: event.target.value })} />
-            </div>
-            <div>
-              <label className="portal-label block">Phone number</label>
-              <input className="portal-input mt-1" value={form.phone_number} onChange={(event) => setForm({ ...form, phone_number: event.target.value })} />
-            </div>
-            <button type="submit" className="portal-button-primary w-full">Broadcast</button>
-          </form>
-        </div>
-        <div className="portal-panel">
-          <div className="mb-4 text-sm font-medium text-[var(--text-primary)]">Notification Log</div>
-          <div className="max-h-[720px] overflow-y-auto rounded-lg border border-[var(--border-default)]">
-            <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 bg-[var(--bg-app)] text-xs uppercase tracking-wide text-[var(--text-secondary)]">
-                <tr>
-                  <th className="border-b border-[var(--border-default)] px-4 py-2.5 text-left font-medium">Timestamp</th>
-                  <th className="border-b border-[var(--border-default)] px-4 py-2.5 text-left font-medium">Recipient</th>
-                  <th className="border-b border-[var(--border-default)] px-4 py-2.5 text-left font-medium">Phone</th>
-                  <th className="border-b border-[var(--border-default)] px-4 py-2.5 text-left font-medium">Message</th>
-                  <th className="border-b border-[var(--border-default)] px-4 py-2.5 text-left font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((log) => (
-                  <tr key={log.id} className="border-b border-[#f0f2f8] hover:bg-[var(--bg-app)]">
-                    <td className="px-4 py-2.5 text-[var(--text-primary)]">{formatDate(log.sent_at, 'PP p')}</td>
-                    <td className="px-4 py-2.5 text-[var(--text-primary)]">{log.recipient_name}</td>
-                    <td className="px-4 py-2.5 text-[var(--text-primary)]">{log.phone_number}</td>
-                    <td className="px-4 py-2.5 text-[var(--text-primary)]">{log.message.slice(0, 40)}</td>
-                    <td className="px-4 py-2.5"><Badge status={log.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       </div>

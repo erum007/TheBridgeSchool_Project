@@ -28,17 +28,13 @@ def test_update_my_settings_persists_profile_values():
 
     payload = UserUpdateSettings(
         name='New Name',
-        whatsapp_number='+1234567890',
         email_notifications_enabled=False,
-        whatsapp_notifications_enabled=True,
     )
 
     result = update_my_settings(payload, db=db, current_user=user)
 
     assert user.name == 'New Name'
-    assert user.whatsapp_number == '+1234567890'
     assert user.email_notifications_enabled is False
-    assert user.whatsapp_notifications_enabled is True
     assert result['name'] == 'New Name'
     assert db.commit_calls == 1
 

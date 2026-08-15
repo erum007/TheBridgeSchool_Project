@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, ClipboardList, FileText, Megaphone, MessageSquareMore, Shield, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
+import { CalendarDays, ClipboardList, FileText, Megaphone, Shield, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
 
 import { useAuth } from '../../context/AuthContext.jsx'
 import AppHeader from './AppHeader.jsx'
@@ -11,7 +11,6 @@ const adminNav = [
     { to: '/admin/meetings', label: 'Meeting Workspace', icon: CalendarDays },
     { to: '/admin/email', label: 'Email Module', icon: MailIcon },
     { to: '/admin/results', label: 'Performance Broadcaster', icon: Trophy },
-    { to: '/admin/whatsapp', label: 'WhatsApp Alerts', icon: MessageSquareMore },
     { to: '/admin/portal', label: 'Portal Management', icon: Users },
     { to: '/admin/settings', label: 'Settings', icon: Users },
   ] },

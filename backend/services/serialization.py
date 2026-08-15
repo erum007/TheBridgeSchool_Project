@@ -20,11 +20,9 @@ def serialize_user(user):
         'email': user.email,
         'role': user.role.value if hasattr(user.role, 'value') else user.role,
         'head_teacher': user.head_teacher,
-        'whatsapp_number': user.whatsapp_number,
         'department': user.department,
         'profile_picture_url': getattr(user, 'profile_picture_url', None),
         'email_notifications_enabled': getattr(user, 'email_notifications_enabled', True),
-        'whatsapp_notifications_enabled': getattr(user, 'whatsapp_notifications_enabled', True),
         'departments': [department.name for department in getattr(user, 'departments', [])],
         'guardians': [
             {'id': guardian.id, 'name': guardian.name, 'email': guardian.email}
@@ -241,17 +239,4 @@ def serialize_opportunity(opportunity):
         'created_by': opportunity.created_by,
         'created_by_name': getattr(getattr(opportunity, 'created_by_user', None), 'name', None),
         'created_at': iso(opportunity.created_at),
-    }
-
-
-def serialize_whatsapp_log(log):
-    return {
-        'id': log.id,
-        'recipient_name': log.recipient_name,
-        'phone_number': log.phone_number,
-        'message': log.message,
-        'status': log.status.value if hasattr(log.status, 'value') else log.status,
-        'sent_at': iso(log.sent_at),
-        'sent_by': log.sent_by,
-        'sent_by_name': getattr(getattr(log, 'sent_by_user', None), 'name', None),
     }

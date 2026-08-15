@@ -9,4 +9,3 @@ from .push import PushSubscriptionCreate
 from .opportunity import OpportunityCreate, OpportunityRead
 from .result import ResultRead
 from .user import GuardianRegistration, ParentLinkCreate, StudentRegistration, TeacherLinkCreate, UserAdminUpdate, UserCreate, UserRead, UserUpdateSettings
-from .whatsapp import WhatsAppLogRead, WhatsAppSendRequest

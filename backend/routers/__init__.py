@@ -11,4 +11,3 @@ from .push import router as push_router
 from .opportunities import router as opportunities_router
 from .results import router as results_router
 from .users import router as users_router
-from .whatsapp import router as whatsapp_router

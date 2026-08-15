@@ -7,7 +7,6 @@ from .common import (
     NoticeRecipients,
     NoticeStatus,
     UserRole,
-    WhatsAppStatus,
     meeting_attendees,
     notice_department_groups,
     notice_user_groups,
@@ -25,4 +24,3 @@ from .opportunity import Opportunity
 from .result import Result
 from .scheduled_email import ScheduledEmail
 from .user import User
-from .whatsapp_log import WhatsAppLog

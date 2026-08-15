@@ -11,7 +11,6 @@ def apply_additive_schema_updates(engine) -> None:
             'department': 'VARCHAR(120) NULL',
             'profile_picture_url': 'MEDIUMTEXT NULL',
             'email_notifications_enabled': 'BOOLEAN NOT NULL DEFAULT TRUE',
-            'whatsapp_notifications_enabled': 'BOOLEAN NOT NULL DEFAULT TRUE',
             'pending_email': 'VARCHAR(255) NULL',
             'email_change_current_token': 'VARCHAR(64) NULL',
             'email_change_new_token': 'VARCHAR(64) NULL',
@@ -69,7 +68,7 @@ def apply_additive_schema_updates(engine) -> None:
                     'MODIFY COLUMN `link` VARCHAR(500) NOT NULL'
                 ))
         _migrate_notice_schema(connection, inspector)
-        _migrate_whatsapp_action_item_reminders(connection, inspector)
+        _remove_retired_messaging_schema(connection, inspector)
 
 
 def _migrate_notice_schema(connection, inspector) -> None:
@@ -136,38 +135,15 @@ def _migrate_notice_schema(connection, inspector) -> None:
         ))
 
 
-def _migrate_whatsapp_action_item_reminders(connection, inspector) -> None:
-    """Copy legacy WhatsApp action-item reminders into the email reminders table."""
+def _remove_retired_messaging_schema(connection, inspector) -> None:
+    """Remove data and fields from the retired messaging integration."""
     table_names = set(inspector.get_table_names())
-    source_table = 'action_item_whatsapp_reminders'
-    target_table = 'action_item_email_reminders'
-    if source_table not in table_names or target_table not in table_names:
+    for table_name in ('whatsapp_logs', 'action_item_whatsapp_reminders'):
+        if table_name in table_names:
+            connection.execute(text(f'DROP TABLE `{table_name}`'))
+    if 'users' not in table_names:
         return
-    existing_action_item_ids = {
-        row[0]
-        for row in connection.execute(text(f'SELECT action_item_id FROM `{target_table}`')).fetchall()
-    }
-    rows = connection.execute(text(
-        f'SELECT action_item_id, frequency, run_at, is_active, last_sent_at, created_by, created_at '
-        f'FROM `{source_table}`'
-    )).fetchall()
-    for row in rows:
-        action_item_id = row[0]
-        if action_item_id in existing_action_item_ids:
-            continue
-        connection.execute(
-            text(
-                f'INSERT INTO `{target_table}` '
-                f'(action_item_id, frequency, run_at, is_active, last_sent_at, created_by, created_at) '
-                f'VALUES (:action_item_id, :frequency, :run_at, :is_active, :last_sent_at, :created_by, :created_at)'
-            ),
-            {
-                'action_item_id': row[0],
-                'frequency': row[1],
-                'run_at': row[2],
-                'is_active': row[3],
-                'last_sent_at': row[4],
-                'created_by': row[5],
-                'created_at': row[6],
-            },
-        )
+    columns = {column['name'] for column in inspector.get_columns('users')}
+    for column_name in ('whatsapp_number', 'whatsapp_notifications_enabled'):
+        if column_name in columns:
+            connection.execute(text(f'ALTER TABLE `users` DROP COLUMN `{column_name}`'))

@@ -28,7 +28,6 @@ from .models import (
     ScheduledEmail,
     User,
     UserRole,
-    WhatsAppLog,
     meeting_attendees,
     parent_student_links,
 )
@@ -46,7 +45,6 @@ from .routers import (
     opportunities_router,
     results_router,
     users_router,
-    whatsapp_router,
     restore_scheduled_emails,
 )
 from .services.auth_service import get_password_hash
@@ -88,7 +86,6 @@ app.include_router(notices_router)
 app.include_router(notifications_router)
 app.include_router(push_router)
 app.include_router(opportunities_router)
-app.include_router(whatsapp_router)
 app.include_router(dashboard_router)
 app.include_router(departments_router)
 app.include_router(ai_router)
@@ -198,14 +195,6 @@ def _seed_demo_data(db: Session) -> None:
     )
     db.add(result)
 
-    log = WhatsAppLog(
-        recipient_name=parent.name,
-        phone_number='+15555550123',
-        message='Aisha achieved 87.5 in Mathematics this term.',
-        status='sent',
-        sent_by=teacher.id,
-    )
-    db.add(log)
     db.commit()
 
 

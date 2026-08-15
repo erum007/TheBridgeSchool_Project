@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from ..dependencies import get_current_user, get_db, require_roles
-from ..models import ActionItem, Department, EmailTemplate, Meeting, Notice, Opportunity, Result, ScheduledEmail, User, UserRole, WhatsAppLog, meeting_attendees, parent_student_links, teacher_student_links, user_departments
+from ..models import ActionItem, Department, EmailTemplate, Meeting, Notice, Opportunity, Result, ScheduledEmail, User, UserRole, meeting_attendees, parent_student_links, teacher_student_links, user_departments
 from ..schemas import ParentLinkCreate, StudentRegistration, TeacherLinkCreate, UserAdminUpdate, UserCreate, UserUpdateSettings
 from ..services.auth_service import get_password_hash
 from ..services.email_service import send_plain_email
@@ -77,7 +77,6 @@ def _delete_user_record(db: Session, user: User) -> None:
     db.query(EmailTemplate).filter(EmailTemplate.created_by == user_id).delete(synchronize_session=False)
     db.query(Notice).filter(Notice.created_by == user_id).delete(synchronize_session=False)
     db.query(Opportunity).filter(Opportunity.created_by == user_id).delete(synchronize_session=False)
-    db.query(WhatsAppLog).filter(WhatsAppLog.sent_by == user_id).delete(synchronize_session=False)
     db.query(Meeting).filter(Meeting.created_by == user_id).delete(synchronize_session=False)
     db.query(User).filter(User.id == user_id).delete(synchronize_session=False)
     db.flush()
@@ -213,7 +212,6 @@ def create_user(payload: UserCreate, background_tasks: BackgroundTasks, db: Sess
         hashed_password=get_password_hash(payload.password),
         role=role,
         head_teacher=payload.head_teacher,
-        whatsapp_number=payload.whatsapp_number,
         department=department_name if role == UserRole.staff else None,
         is_active=payload.is_active,
     )
@@ -537,8 +535,6 @@ def update_my_settings(payload: UserUpdateSettings, db: Session = Depends(get_db
         if not name:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Name cannot be empty')
         current_user.name = name
-    if payload.whatsapp_number is not None:
-        current_user.whatsapp_number = payload.whatsapp_number or None
     if payload.profile_picture_url is not None:
         picture_url = payload.profile_picture_url or None
         # The browser sends an image data URL.  Keep a practical upper bound so
@@ -549,8 +545,6 @@ def update_my_settings(payload: UserUpdateSettings, db: Session = Depends(get_db
         current_user.profile_picture_url = picture_url
     if payload.email_notifications_enabled is not None:
         current_user.email_notifications_enabled = payload.email_notifications_enabled
-    if payload.whatsapp_notifications_enabled is not None:
-        current_user.whatsapp_notifications_enabled = payload.whatsapp_notifications_enabled
     db.commit()
     db.refresh(current_user)
     return serialize_user(current_user)
