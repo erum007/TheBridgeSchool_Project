@@ -1057,9 +1057,10 @@ export function EmailModuleView() {
   }
 
   return (
-    <div className="rounded-xl border border-[var(--border-default)] bg-white p-6 shadow-sm">
+    <div className="email-module min-w-0 rounded-xl border border-[var(--border-default)] bg-white p-4 shadow-sm sm:p-6">
       <PageHeader title="Email Module" subtitle="Compose, schedule, and manage templates." />
       <Tabs
+        className="email-module-tabs"
         activeTab={tab}
         onTabChange={setTab}
         tabs={[
@@ -1211,7 +1212,7 @@ export function EmailModuleView() {
                 {compose.attachments.length > 0 && <AttachmentList attachments={compose.attachments} onRemove={(storedFilename) => setCompose((current) => ({ ...current, attachments: current.attachments.filter((attachment) => attachment.stored_filename !== storedFilename) }))} />}
                 {emailQualityIssues(compose).length > 0 && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{emailQualityIssues(compose).map((issue) => <div key={issue.message}>• {issue.message}</div>)}</div>}
               </div>
-                <div className="lg:col-span-2 flex justify-end gap-3">
+                <div className="email-compose-actions flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end lg:col-span-2">
                   <button type="button" className="portal-button-secondary" onClick={() => { setPreviewTarget('compose'); setPreviewOpen(true) }}>Preview</button>
                   <button type="button" className="portal-button-secondary" onClick={() => sendTestEmail(compose)}>Send Test</button>
                   <button type="button" className="portal-button-secondary" onClick={saveDraft}>Save Draft</button>
@@ -1266,7 +1267,7 @@ export function EmailModuleView() {
               </div>
                   {/* <button type="submit" className="portal-button-primary">Create Template</button>
                    */}
-                 <div className="flex gap-3">
+                 <div className="email-template-actions flex flex-col gap-3 sm:flex-row sm:flex-wrap">
 
                   <button
                     type="submit"
@@ -1314,7 +1315,7 @@ export function EmailModuleView() {
     size="large"
 >
     <div className="min-w-0 space-y-4">
-        <div className="flex justify-end gap-2"><button type="button" className={`portal-button-secondary ${previewDevice === 'desktop' ? 'bg-slate-100' : ''}`} onClick={() => setPreviewDevice('desktop')}>Desktop</button><button type="button" className={`portal-button-secondary ${previewDevice === 'mobile' ? 'bg-slate-100' : ''}`} onClick={() => setPreviewDevice('mobile')}>Mobile</button><button type="button" className="portal-button-secondary" onClick={() => setPreviewDark((value) => !value)}>{previewDark ? 'Light' : 'Dark'} mode</button></div>
+        <div className="flex flex-wrap justify-end gap-2"><button type="button" className={`portal-button-secondary ${previewDevice === 'desktop' ? 'bg-slate-100' : ''}`} onClick={() => setPreviewDevice('desktop')}>Desktop</button><button type="button" className={`portal-button-secondary ${previewDevice === 'mobile' ? 'bg-slate-100' : ''}`} onClick={() => setPreviewDevice('mobile')}>Mobile</button><button type="button" className="portal-button-secondary" onClick={() => setPreviewDark((value) => !value)}>{previewDark ? 'Light' : 'Dark'} mode</button></div>
         <div className="border-b pb-4">
             <p>
                 <strong>From:</strong> school@bridge.edu

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-export default function Tabs({ tabs, defaultTab, activeTab: controlledActiveTab, onTabChange }) {
+export default function Tabs({ tabs, defaultTab, activeTab: controlledActiveTab, onTabChange, className = '' }) {
   const visibleTabs = useMemo(() => tabs.filter((tab) => !tab.hidden), [tabs])
   const initialTab = defaultTab || visibleTabs[0]?.id
   const [uncontrolledActiveTab, setUncontrolledActiveTab] = useState(initialTab)
@@ -23,7 +23,7 @@ export default function Tabs({ tabs, defaultTab, activeTab: controlledActiveTab,
   const activeContent = useMemo(() => tabs.find((tab) => tab.id === activeTab)?.content, [activeTab, tabs])
 
   return (
-    <div>
+    <div className={className}>
       <div className="relative mb-6 border-b border-[var(--border-default)]">
         <div className="flex gap-1">
           {visibleTabs.map((tab) => (

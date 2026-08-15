@@ -283,6 +283,74 @@ input[type='checkbox'] {
 .email-table-block td, .email-table-block th, .email-preview-content td, .email-preview-content th { border: 1px solid #d9dce6; padding: 10px; }
 .email-button-block { margin: 14px 0; }
 
+@media (max-width: 639px) {
+  .email-module {
+    border-radius: 0.75rem;
+  }
+
+  .email-module .portal-panel {
+    padding: 1rem;
+  }
+
+  .email-module-tabs > div:first-child {
+    margin-right: -1rem;
+    margin-left: -1rem;
+    overflow-x: auto;
+    padding: 0 1rem;
+    scrollbar-width: none;
+  }
+
+  .email-module-tabs > div:first-child::-webkit-scrollbar {
+    display: none;
+  }
+
+  .email-module-tabs > div:first-child > div:first-child {
+    width: max-content;
+  }
+
+  .email-module-tabs > div:first-child button {
+    padding-right: 0.75rem;
+    padding-left: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .email-editor .ql-toolbar {
+    display: flex;
+    max-height: 8.5rem;
+    gap: 0.125rem;
+    overflow-y: auto;
+    padding: 0.5rem;
+  }
+
+  .email-editor .ql-toolbar .ql-formats {
+    display: inline-flex;
+    flex-wrap: wrap;
+    margin-right: 0.25rem;
+  }
+
+  .email-editor .ql-container,
+  .email-editor .ql-editor {
+    min-height: 260px;
+  }
+
+  .email-editor .ql-editor {
+    padding: 0.875rem;
+  }
+
+  .email-compose-actions > button,
+  .email-template-actions > button {
+    width: 100%;
+  }
+
+  .email-module table {
+    min-width: 34rem;
+  }
+
+  .email-preview-content table {
+    min-width: 0;
+  }
+}
+
 /* Keep user-authored email content inside the preview modal on narrow screens
    and when a paragraph contains a long, unbroken value such as a URL. */
 .email-preview-content,
