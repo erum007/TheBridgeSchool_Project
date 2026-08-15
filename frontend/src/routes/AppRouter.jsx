@@ -46,7 +46,6 @@ export default function AppRouter() {
       <Route path="/teacher/meetings" element={<ProtectedRoute roles={[ 'teacher' ]}><MeetingWorkspaceView canCreateMeeting /></ProtectedRoute>} />
       <Route path="/teacher/results" element={<ProtectedRoute roles={[ 'teacher' ]}><PerformanceBroadcasterView /></ProtectedRoute>} />
       <Route path="/teacher/notices" element={<ProtectedRoute roles={[ 'teacher' ]}><NoticeBoardView /></ProtectedRoute>} />
-      <Route path="/teacher/broadcast" element={<ProtectedRoute roles={[ 'teacher' ]}><PerformanceBroadcasterView /></ProtectedRoute>} />
       <Route path="/teacher/settings" element={<ProtectedRoute roles={[ 'teacher' ]}><SettingsView /></ProtectedRoute>} />
       <Route path="/teacher/notifications" element={<ProtectedRoute roles={[ 'teacher' ]}><NotificationsPage /></ProtectedRoute>} />
 
