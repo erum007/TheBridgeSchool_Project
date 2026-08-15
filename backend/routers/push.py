@@ -7,7 +7,7 @@ from ..config import settings
 from ..dependencies import get_current_user, get_db
 from ..models import PushSubscription, User
 from ..schemas import PushSubscriptionCreate
-from ..services.notification_service import create_notification, notification_link
+from ..services.notification_service import _send_web_push, notification_link
 
 
 router = APIRouter(prefix='/api/push', tags=['push notifications'])
@@ -46,13 +46,15 @@ def send_test_push(db: Session = Depends(get_db), current_user: User = Depends(g
     """Send a real web-push request to the current user's saved devices."""
     if not db.query(PushSubscription.id).filter(PushSubscription.user_id == current_user.id).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='This browser is not registered for device notifications')
-    create_notification(
+    result = _send_web_push(
         db,
         current_user.id,
         'Device notification test',
         'Your browser is registered and the server has sent this test notification.',
-        'device_test',
         notification_link(current_user.role, '/settings'),
     )
     db.commit()
+    if result['sent'] == 0:
+        detail = 'The saved browser subscription is no longer valid. Enable device notifications again to repair it.' if result['removed'] else 'The push service rejected the notification. Check the server logs and VAPID configuration.'
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
     return {'detail': 'A test notification was sent to this account\'s registered device(s).'}

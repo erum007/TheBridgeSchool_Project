@@ -29,15 +29,15 @@ def create_notification(db, recipient_id: int, title: str, body: str, notificati
     return notification
 
 
-def _send_web_push(db, recipient_id: int, title: str, body: str, link: str | None) -> None:
+def _send_web_push(db, recipient_id: int, title: str, body: str, link: str | None) -> dict[str, int]:
     """Best-effort delivery: a push outage must never block the portal action."""
     if not settings.vapid_public_key or not settings.vapid_private_key:
-        return
+        return {'sent': 0, 'failed': 0, 'removed': 0}
     try:
         from pywebpush import WebPushException, webpush
     except ImportError:
         logger.warning('Web push is configured but pywebpush is not installed')
-        return
+        return {'sent': 0, 'failed': 0, 'removed': 0}
     subject = settings.vapid_subject.strip()
     # VAPID requires a contact URI. Accepting a bare email keeps local setup
     # forgiving while still sending the standards-compliant mailto form.
@@ -52,6 +52,7 @@ def _send_web_push(db, recipient_id: int, title: str, body: str, link: str | Non
         'link': link or '/',
         'tag': f'bridge-{recipient_id}-{time.time_ns()}',
     })
+    result = {'sent': 0, 'failed': 0, 'removed': 0}
     for subscription in db.query(PushSubscription).filter(PushSubscription.user_id == recipient_id).all():
         try:
             webpush(
@@ -61,11 +62,16 @@ def _send_web_push(db, recipient_id: int, title: str, body: str, link: str | Non
                 vapid_claims={'sub': subject},
                 timeout=10,
             )
+            result['sent'] += 1
         except WebPushException as exc:
             status_code = getattr(getattr(exc, 'response', None), 'status_code', None)
             if status_code in {404, 410}:
                 db.delete(subscription)
+                result['removed'] += 1
             else:
+                result['failed'] += 1
                 logger.warning('Web push delivery failed for subscription %s: %s', subscription.id, exc)
         except Exception:
+            result['failed'] += 1
             logger.exception('Unexpected web push delivery failure for subscription %s', subscription.id)
+    return result

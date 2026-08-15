@@ -6,6 +6,13 @@ const base64ToUint8Array = (base64) => {
   return Uint8Array.from(atob(normalized), (character) => character.charCodeAt(0))
 }
 
+const keysMatch = (subscription, expectedKey) => {
+  const currentKey = subscription.options?.applicationServerKey
+  if (!currentKey) return false
+  const currentBytes = new Uint8Array(currentKey)
+  return currentBytes.length === expectedKey.length && currentBytes.every((value, index) => value === expectedKey[index])
+}
+
 export const browserPushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 
 export async function registerBrowserPush() {
@@ -16,8 +23,15 @@ export async function registerBrowserPush() {
   // handle a push after the portal window has been closed.
   const registration = await navigator.serviceWorker.ready
   const keyResponse = await pushApi.publicKey()
+  const applicationServerKey = base64ToUint8Array(keyResponse.data.public_key)
   let subscription = await registration.pushManager.getSubscription()
-  if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64ToUint8Array(keyResponse.data.public_key) })
+  // A subscription is bound to the VAPID key used to create it. Reusing one
+  // after a key rotation makes the UI look enabled while every send is rejected.
+  if (subscription && !keysMatch(subscription, applicationServerKey)) {
+    await subscription.unsubscribe()
+    subscription = null
+  }
+  if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey })
   await pushApi.subscribe(subscription.toJSON())
   return subscription
 }
