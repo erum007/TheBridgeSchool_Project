@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, ClipboardList, FileText, Megaphone, Shield, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
+import { CalendarDays, ClipboardList, FileText, Shield, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
 
 import { useAuth } from '../../context/AuthContext.jsx'
 import AppHeader from './AppHeader.jsx'
@@ -26,7 +26,6 @@ const teacherNav = [
     { to: '/teacher/meetings', label: 'Meeting Workspace', icon: CalendarDays },
     { to: '/teacher/results', label: 'Performance Broadcaster', icon: Trophy },
     { to: '/teacher/notices', label: 'Notice Board', icon: FileText },
-    { to: '/teacher/broadcast', label: 'Broadcaster', icon: Megaphone },
     { to: '/teacher/settings', label: 'Settings', icon: Users },
   ] },
 ]
