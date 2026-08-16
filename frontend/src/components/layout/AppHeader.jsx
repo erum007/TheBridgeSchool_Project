@@ -1,5 +1,5 @@
 import { Bell, Menu, Settings } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -10,6 +10,7 @@ export default function AppHeader({ onToggleSidebar, title }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [notificationOpen, setNotificationOpen] = useState(false)
+  const notificationMenuRef = useRef(null)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [notificationsLoading, setNotificationsLoading] = useState(false)
@@ -73,6 +74,26 @@ export default function AppHeader({ onToggleSidebar, title }) {
     return () => window.clearInterval(refreshInterval)
   }, [user?.id])
 
+  useEffect(() => {
+    if (!notificationOpen) return undefined
+
+    const closeOnOutsideInteraction = (event) => {
+      if (!notificationMenuRef.current?.contains(event.target)) {
+        setNotificationOpen(false)
+      }
+    }
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setNotificationOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsideInteraction)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideInteraction)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [notificationOpen])
+
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[var(--border-default)] bg-white px-4 shadow-none md:px-6">
       <div className="flex items-center gap-3">
@@ -82,7 +103,7 @@ export default function AppHeader({ onToggleSidebar, title }) {
         <p className="font-display text-sm font-semibold capitalize text-[var(--brand-navy)]">{currentPage}</p>
       </div>
       <div className="flex items-center gap-3">
-        <div className="relative">
+        <div ref={notificationMenuRef} className="relative">
           <button type="button" onClick={toggleNotifications} className="portal-button-ghost relative h-9 w-9" aria-label="Notifications" aria-expanded={notificationOpen}>
             <Bell className="h-4 w-4" />
             {unreadCount > 0 ? <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--brand-red)] px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span> : null}
