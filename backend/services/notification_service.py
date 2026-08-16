@@ -98,7 +98,14 @@ def _send_device_push(db, recipient_id: int, title: str, body: str, link: str | 
         try:
             messaging.send(messaging.Message(
                 notification=messaging.Notification(title=title[:255], body=body),
-                data={'link': link or '/'},
+                data={
+                    'link': link or '/',
+                    # Firebasex deliberately suppresses tray notifications while
+                    # the app is open unless this string flag is present.
+                    'notification_foreground': 'true',
+                    'notification_title': title[:255],
+                    'notification_body': body,
+                },
                 token=device.token,
                 android=messaging.AndroidConfig(priority='high'),
             ))
