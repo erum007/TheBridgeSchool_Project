@@ -38,6 +38,7 @@ class Settings:
     vapid_public_key: str = os.getenv('VAPID_PUBLIC_KEY', '')
     vapid_private_key: str = os.getenv('VAPID_PRIVATE_KEY', '')
     vapid_subject: str = os.getenv('VAPID_SUBJECT', 'mailto:admin@bridge.school')
+    rate_limit_enabled: bool = os.getenv('RATE_LIMIT_ENABLED', 'true').lower() not in {'0', 'false', 'no'}
 
     @staticmethod
     def _resolve_ssl_ca(value: str) -> str:

@@ -38,6 +38,18 @@ npm run dev
 
 The frontend uses same-origin API paths by default, so no source changes are needed when the frontend and backend are deployed behind one domain. For a separately hosted API, set `VITE_API_URL` in the frontend deployment environment and set `CORS_ORIGINS` in the backend environment (see the `.env.example` files). Uploaded email images use the deployed request host; set `PUBLIC_BASE_URL` in the backend environment if a reverse proxy does not forward that public host.
 
+### API rate limits
+
+Requests are limited per client and API service. Standard reads allow 120 requests
+per minute and writes allow 30 per minute. Email delivery, push delivery, and file
+uploads allow 10 per minute; AI and sensitive authentication operations allow 5 per
+minute. Responses include `X-RateLimit-*` headers, and rejected requests return HTTP
+`429` with `Retry-After`. Set `RATE_LIMIT_ENABLED=false` only when local testing needs
+to bypass the limiter.
+
+The included counter is process-local. Use a shared backing store such as Redis before
+running multiple backend workers or replicas so every instance shares the same quota.
+
 ### Web push notifications
 
 Web push requires HTTPS (localhost is allowed for development), a service worker, browser permission, and VAPID keys. Generate one VAPID key pair for the deployed application, set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` in `backend/.env`, then restart the backend. Users opt in from Settings → Device notifications. A browser profile is associated with the most recently signed-in account, so shared/public computers should not enable device notifications.

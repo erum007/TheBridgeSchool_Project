@@ -51,6 +51,7 @@ from .services.auth_service import get_password_hash
 from .services.scheduler_service import ensure_scheduler_started
 from .services.action_item_email_reminder_service import restore_reminders
 from .services.schema_migration_service import apply_additive_schema_updates
+from .rate_limiting import RateLimitMiddleware
 
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 
+app.add_middleware(RateLimitMiddleware, enabled=settings.rate_limit_enabled)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
