@@ -43,6 +43,7 @@ class User(Base):
     scheduled_emails_created = relationship('ScheduledEmail', back_populates='created_by_user', foreign_keys='ScheduledEmail.created_by')
     notifications = relationship('Notification', back_populates='recipient', cascade='all, delete-orphan')
     push_subscriptions = relationship('PushSubscription', back_populates='user', cascade='all, delete-orphan')
+    device_push_tokens = relationship('DevicePushToken', back_populates='user', cascade='all, delete-orphan')
     children = relationship(
         'User',
         secondary=parent_student_links,

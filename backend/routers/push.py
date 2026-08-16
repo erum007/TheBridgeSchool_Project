@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..dependencies import get_current_user, get_db
-from ..models import PushSubscription, User
-from ..schemas import PushSubscriptionCreate
-from ..services.notification_service import _send_web_push, notification_link
+from ..models import DevicePushToken, PushSubscription, User
+from ..schemas import DevicePushTokenCreate, PushSubscriptionCreate
+from ..services.notification_service import _send_device_push, _send_web_push, notification_link
 
 
 router = APIRouter(prefix='/api/push', tags=['push notifications'])
@@ -41,20 +41,42 @@ def remove_subscription(payload: PushSubscriptionCreate, db: Session = Depends(g
     return {'detail': 'This browser is no longer registered for this account'}
 
 
+@router.post('/device-tokens')
+def save_device_token(payload: DevicePushTokenCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    device = db.query(DevicePushToken).filter(DevicePushToken.token == payload.token).first()
+    if device:
+        device.user_id, device.platform = current_user.id, payload.platform
+    else:
+        db.add(DevicePushToken(user_id=current_user.id, token=payload.token, platform=payload.platform))
+    db.commit()
+    return {'detail': 'This device is registered for this account'}
+
+
+@router.delete('/device-tokens')
+def remove_device_token(payload: DevicePushTokenCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db.query(DevicePushToken).filter(DevicePushToken.token == payload.token, DevicePushToken.user_id == current_user.id).delete(synchronize_session=False)
+    db.commit()
+    return {'detail': 'This device is no longer registered for this account'}
+
+
 @router.post('/test')
 def send_test_push(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Send a real web-push request to the current user's saved devices."""
-    if not db.query(PushSubscription.id).filter(PushSubscription.user_id == current_user.id).first():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='This browser is not registered for device notifications')
-    result = _send_web_push(
+    """Send a real push request to the current user's browsers and native devices."""
+    has_web = db.query(PushSubscription.id).filter(PushSubscription.user_id == current_user.id).first()
+    has_native = db.query(DevicePushToken.id).filter(DevicePushToken.user_id == current_user.id).first()
+    if not has_web and not has_native:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='This device is not registered for notifications')
+    web_result = _send_web_push(
         db,
         current_user.id,
         'Device notification test',
         'Your browser is registered and the server has sent this test notification.',
         notification_link(current_user.role, '/settings'),
     )
+    native_result = _send_device_push(db, current_user.id, 'Device notification test', 'Your device is registered and the server has sent this test notification.', notification_link(current_user.role, '/settings'))
     db.commit()
-    if result['sent'] == 0:
-        detail = 'The saved browser subscription is no longer valid. Enable device notifications again to repair it.' if result['removed'] else 'The push service rejected the notification. Check the server logs and VAPID configuration.'
+    if web_result['sent'] + native_result['sent'] == 0:
+        removed = web_result['removed'] + native_result['removed']
+        detail = 'The saved notification registration is no longer valid. Enable device notifications again to repair it.' if removed else 'The push service rejected the notification. Check the server push configuration.'
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
     return {'detail': 'A test notification was sent to this account\'s registered device(s).'}

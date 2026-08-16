@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 
 import { authApi } from '../api/auth.js'
+import { setApiToken } from '../api/axios.js'
 import { browserPushSupported, registerBrowserPush } from '../utils/webPush.js'
+import { isCordova, registerNativePush, removeNativePush, secureGet, secureRemove, secureSet } from '../utils/native.js'
 
 const AuthContext = createContext(null)
 
@@ -15,20 +17,18 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true
-    const storedToken = window.localStorage.getItem(tokenKey)
-    const storedUser = window.localStorage.getItem(userKey)
-    if (storedToken) setToken(storedToken)
-    if (storedUser && !storedToken) {
-      try {
-        setUser(JSON.parse(storedUser))
-      } catch {
-        window.localStorage.removeItem(userKey)
-      }
-    }
+    const localToken = window.localStorage.getItem(tokenKey)
     const restoreCurrentUser = async () => {
+      const storedToken = isCordova() ? (await secureGet(tokenKey) || localToken) : localToken
       if (!storedToken) {
         if (active) setInitialising(false)
         return
+      }
+      setApiToken(storedToken)
+      if (active) setToken(storedToken)
+      if (isCordova() && localToken) {
+        secureSet(tokenKey, localToken)
+        window.localStorage.removeItem(tokenKey)
       }
       try {
         const currentUser = (await authApi.me()).data
@@ -39,6 +39,7 @@ export function AuthProvider({ children }) {
       } catch {
         if (active) {
           setToken(null)
+          setApiToken(null)
           setUser(null)
           window.localStorage.removeItem(tokenKey)
           window.localStorage.removeItem(userKey)
@@ -56,22 +57,29 @@ export function AuthProvider({ children }) {
     const nextToken = response.data.access_token
     const nextUser = response.data.user
     setToken(nextToken)
+    setApiToken(nextToken)
     setUser(nextUser)
-    window.localStorage.setItem(tokenKey, nextToken)
+    if (!isCordova()) window.localStorage.setItem(tokenKey, nextToken)
     window.localStorage.setItem(userKey, JSON.stringify(nextUser))
+    secureSet(tokenKey, nextToken)
     // A push subscription belongs to this browser profile. Re-associate it on
     // every login so a shared browser only delivers to the latest account.
-    if (browserPushSupported() && Notification.permission === 'granted') {
+    if (isCordova()) {
+      registerNativePush(false).catch(() => {})
+    } else if (browserPushSupported() && Notification.permission === 'granted') {
       registerBrowserPush().catch(() => {})
     }
     return nextUser
   }
 
   const logout = () => {
+    removeNativePush()
     setToken(null)
+    setApiToken(null)
     setUser(null)
     window.localStorage.removeItem(tokenKey)
     window.localStorage.removeItem(userKey)
+    secureRemove(tokenKey)
   }
 
   const value = useMemo(

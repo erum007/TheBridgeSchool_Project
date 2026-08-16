@@ -5,7 +5,7 @@ import logging
 import time
 
 from ..config import settings
-from ..models import Notification, PushSubscription
+from ..models import DevicePushToken, Notification, PushSubscription
 
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ def create_notification(db, recipient_id: int, title: str, body: str, notificati
     )
     db.add(notification)
     _send_web_push(db, recipient_id, title, body, link)
+    _send_device_push(db, recipient_id, title, body, link)
     return notification
 
 
@@ -74,4 +75,38 @@ def _send_web_push(db, recipient_id: int, title: str, body: str, link: str | Non
         except Exception:
             result['failed'] += 1
             logger.exception('Unexpected web push delivery failure for subscription %s', subscription.id)
+    return result
+
+
+def _send_device_push(db, recipient_id: int, title: str, body: str, link: str | None) -> dict[str, int]:
+    """Best-effort Firebase delivery to installed mobile apps."""
+    devices = db.query(DevicePushToken).filter(DevicePushToken.user_id == recipient_id).all()
+    result = {'sent': 0, 'failed': 0, 'removed': 0}
+    if not devices or not settings.firebase_service_account_json:
+        return result
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, messaging
+        if not firebase_admin._apps:
+            service_account = json.loads(settings.firebase_service_account_json)
+            firebase_admin.initialize_app(credentials.Certificate(service_account))
+    except Exception:
+        logger.exception('Firebase Admin could not be initialized')
+        result['failed'] = len(devices)
+        return result
+    for device in devices:
+        try:
+            messaging.send(messaging.Message(
+                notification=messaging.Notification(title=title[:255], body=body),
+                data={'link': link or '/'},
+                token=device.token,
+                android=messaging.AndroidConfig(priority='high'),
+            ))
+            result['sent'] += 1
+        except (messaging.UnregisteredError, messaging.SenderIdMismatchError):
+            db.delete(device)
+            result['removed'] += 1
+        except Exception:
+            result['failed'] += 1
+            logger.exception('Firebase push delivery failed for device %s', device.id)
     return result

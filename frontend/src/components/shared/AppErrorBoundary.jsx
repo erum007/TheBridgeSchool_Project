@@ -18,7 +18,7 @@ export default class AppErrorBoundary extends Component {
           <div className="max-w-md rounded-xl border border-[var(--border-default)] bg-white p-6 text-center shadow-sm">
             <h1 className="font-display text-xl font-semibold text-[var(--text-primary)]">This page could not load</h1>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">The portal is still available. Return to the dashboard and try again.</p>
-            <a href="/" className="portal-button-primary mt-5 inline-flex">Return to dashboard</a>
+            <a href={window.cordova ? '#/' : '/'} className="portal-button-primary mt-5 inline-flex">Return to dashboard</a>
           </div>
         </main>
       )

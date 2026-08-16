@@ -62,6 +62,7 @@ import { authApi } from '../api/auth.js'
 import { departmentsApi } from '../api/departments.js'
 import { browserPushSupported, registerBrowserPush } from '../utils/webPush.js'
 import { pushApi } from '../api/push.js'
+import { isCordova, nativePushStatus, openExternal, registerNativePush, saveFile } from '../utils/native.js'
 
 import Badge from '../components/shared/Badge.jsx'
 import EmptyState from '../components/shared/EmptyState.jsx'
@@ -305,7 +306,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     }
   }
 
-  const downloadSummaryPdf = () => {
+  const downloadSummaryPdf = async () => {
     const meeting = pastMeetings.find((item) => item.id === Number(selectedPastMeeting))
     if (!meeting || !summary) {
       toast.error('Generate or select a meeting summary before downloading it')
@@ -365,7 +366,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
 
     const slug = meeting.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'meeting'
     const dateForFilename = format(parseISO(meeting.scheduled_at), 'yyyy-MM-dd')
-    document.save(`meeting-summary-${slug}-${dateForFilename}.pdf`)
+    await saveFile(document.output('blob'), `meeting-summary-${slug}-${dateForFilename}.pdf`, 'application/pdf')
   }
 
   const boardColumns = ['todo', 'in_progress', 'done'].map((status) => ({
@@ -610,7 +611,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
           </div>
           <div><div className="text-sm font-semibold text-[var(--text-primary)]">Agenda</div><p className="mt-2 whitespace-pre-wrap text-sm text-[var(--text-secondary)]">{selectedMeeting.agenda || 'No agenda was added for this meeting.'}</p></div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {selectedMeeting.meeting_link ? <div><div className="text-sm font-semibold text-[var(--text-primary)]">Meeting link</div><a href={selectedMeeting.meeting_link} target="_blank" rel="noreferrer" className="mt-2 inline-flex break-all text-sm font-medium text-[var(--brand-blue)] underline">Open online meeting</a></div> : null}
+            {selectedMeeting.meeting_link ? <div><div className="text-sm font-semibold text-[var(--text-primary)]">Meeting link</div><button type="button" onClick={() => openExternal(selectedMeeting.meeting_link)} className="mt-2 inline-flex break-all text-sm font-medium text-[var(--brand-blue)] underline">Open online meeting</button></div> : null}
             {selectedMeeting.location ? <div><div className="text-sm font-semibold text-[var(--text-primary)]">Location</div><p className="mt-2 text-sm text-[var(--text-secondary)]">{selectedMeeting.location}</p></div> : null}
           </div>
           <div><div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-[var(--text-primary)]">Attendees</div><span className="text-xs text-[var(--text-muted)]">{selectedMeeting.attendees?.length || 0} invited</span></div>{selectedMeeting.attendees?.length ? <div className="mt-3 flex flex-wrap gap-2">{selectedMeeting.attendees.map((attendee) => <span key={attendee.id} className="rounded-full border border-[var(--border-default)] px-3 py-1 text-xs text-[var(--text-secondary)]">{attendee.name}</span>)}</div> : <p className="mt-2 text-sm text-[var(--text-muted)]">No portal attendees were added.</p>}</div>
@@ -1462,12 +1463,7 @@ export function PerformanceBroadcasterView() {
   const downloadBatch = async (batchId) => {
     try {
       const response = await resultsApi.downloadBatch(batchId)
-      const url = URL.createObjectURL(new Blob([response.data]))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `results_${batchId}.csv`
-      a.click()
-      URL.revokeObjectURL(url)
+      await saveFile(new Blob([response.data], { type: 'text/csv' }), `results_${batchId}.csv`, 'text/csv')
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Could not download batch')
     }
@@ -1491,12 +1487,7 @@ export function PerformanceBroadcasterView() {
       'Sara Ahmed,sara.ahmed@example.com,Science,79,74,88,Term 1 2026',
     ].join('\n')
     const blob = new Blob([sample], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'results_template.csv'
-    a.click()
-    URL.revokeObjectURL(url)
+    saveFile(blob, 'results_template.csv', 'text/csv').catch(() => toast.error('Could not save the template'))
   }
 
   const submit = async (event) => {
@@ -2415,7 +2406,7 @@ export function OpportunityBoardView({ titlePrefix = '' }) {
               <div className="mt-2 text-sm text-[var(--text-secondary)]">{opportunity.eligibility}</div>
               <div className={`mt-3 text-sm ${soon ? 'text-[var(--brand-red)]' : 'text-[var(--text-secondary)]'}`}>Deadline {formatDate(opportunity.deadline)}</div>
               {opportunity.link ? (
-                <a href={opportunity.link} target="_blank" rel="noreferrer" className="portal-button-secondary mt-4 inline-flex">Visit link</a>
+                <button type="button" onClick={() => openExternal(opportunity.link)} className="portal-button-secondary mt-4 inline-flex">Visit link</button>
               ) : null}
             </div>
           )
@@ -2434,7 +2425,11 @@ export function SettingsView({ titlePrefix = '' }) {
   const [emailChangeStep, setEmailChangeStep] = useState('request')
   const [profilePicture, setProfilePicture] = useState('')
   const [emailEnabled, setEmailEnabled] = useState(user?.email_notifications_enabled ?? true)
-  const [pushStatus, setPushStatus] = useState(() => browserPushSupported() ? Notification.permission : 'unsupported')
+  const [pushStatus, setPushStatus] = useState(() => isCordova() ? 'default' : browserPushSupported() ? Notification.permission : 'unsupported')
+
+  useEffect(() => {
+    if (isCordova()) nativePushStatus().then(setPushStatus)
+  }, [])
   const [passwordForm, setPasswordForm] = useState({ otp: '', new_password: '', confirm_password: '' })
   const [passwordCodeSent, setPasswordCodeSent] = useState(false)
 
@@ -2517,6 +2512,15 @@ export function SettingsView({ titlePrefix = '' }) {
   }
 
   const enableDeviceNotifications = async () => {
+    if (isCordova()) {
+      try {
+        await registerNativePush(true)
+        setPushStatus('granted')
+        return toast.success('This phone will now receive device notifications')
+      } catch (error) {
+        return toast.error(error?.message || 'Could not enable device notifications')
+      }
+    }
     if (!browserPushSupported()) return toast.error('This browser does not support device notifications')
     if (Notification.permission === 'denied') return toast.error('Device notifications are blocked. Enable them in your browser site settings first.')
     try {
@@ -2615,9 +2619,9 @@ export function SettingsView({ titlePrefix = '' }) {
           </div>
         </div>
         <div className="portal-panel">
-          <div className="text-sm font-semibold text-[var(--text-primary)]">Device notifications</div><p className="mt-1 text-sm text-[var(--text-secondary)]">Receive meeting, action-item, result, and notice alerts from this browser, even when the portal is not open.</p>
+          <div className="text-sm font-semibold text-[var(--text-primary)]">Device notifications</div><p className="mt-1 text-sm text-[var(--text-secondary)]">Receive meeting, action-item, result, and notice alerts on this device, even when the portal is not open.</p>
           <div className="mt-4 flex flex-wrap items-center gap-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${pushStatus === 'granted' ? 'bg-emerald-50 text-emerald-700' : 'bg-[var(--bg-app)] text-[var(--text-secondary)]'}`}>{pushStatus === 'granted' ? 'Enabled on this browser' : pushStatus === 'denied' ? 'Blocked in browser settings' : pushStatus === 'unsupported' ? 'Not supported' : 'Not enabled'}</span><button type="button" className="portal-button-secondary" onClick={enableDeviceNotifications} disabled={pushStatus === 'granted' || pushStatus === 'unsupported'}>{pushStatus === 'granted' ? 'Device notifications enabled' : 'Enable device notifications'}</button>{pushStatus === 'granted' ? <button type="button" className="portal-button-secondary" onClick={sendDeviceNotificationTest}>Send test notification</button> : null}</div>
-          <p className="mt-3 text-xs text-[var(--text-muted)]">On a shared browser, the most recently signed-in account becomes the only account connected to that browser. Avoid enabling device notifications on public computers.</p>
+          <p className="mt-3 text-xs text-[var(--text-muted)]">The most recently signed-in account becomes the account connected to this device. Avoid enabling notifications on shared devices.</p>
         </div>
         <div className="portal-panel">
           <div className="text-sm font-medium text-[var(--text-primary)]">Change Password</div>

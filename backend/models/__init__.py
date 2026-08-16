@@ -15,6 +15,7 @@ from .common import (
     user_departments,
 )
 from .department import Department
+from .device_push_token import DevicePushToken
 from .email_template import EmailTemplate
 from .meeting import Meeting
 from .notice import Notice

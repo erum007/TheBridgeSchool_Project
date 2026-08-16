@@ -11,8 +11,11 @@ export const api = axios.create({
   baseURL: apiBaseUrl,
 })
 
+let runtimeToken = null
+export const setApiToken = (token) => { runtimeToken = token || null }
+
 api.interceptors.request.use((config) => {
-  const token = window.localStorage.getItem('bridge_school_token')
+  const token = runtimeToken || window.localStorage.getItem('bridge_school_token')
   if (token) {
     config.headers = config.headers || {}
     config.headers.Authorization = `Bearer ${token}`
@@ -24,9 +27,12 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error?.response?.status === 401) {
+      setApiToken(null)
       window.localStorage.removeItem('bridge_school_token')
       window.localStorage.removeItem('bridge_school_user')
-      if (window.location.pathname !== '/login') {
+      if (import.meta.env.VITE_CORDOVA === 'true') {
+        if (window.location.hash !== '#/login') window.location.hash = '#/login'
+      } else if (window.location.pathname !== '/login') {
         window.location.assign('/login')
       }
     }

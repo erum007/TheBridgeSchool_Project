@@ -1,15 +1,19 @@
-import { StrictMode } from 'react'
+import { StrictMode, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, HashRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import './index.css'
 import App from './App.jsx'
 import AppErrorBoundary from './components/shared/AppErrorBoundary.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
+import { initialiseNativeRuntime } from './utils/native.js'
+
+const router = import.meta.env.VITE_CORDOVA === 'true' ? HashRouter : BrowserRouter
+initialiseNativeRuntime().catch(() => {})
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter>
+    {createElement(router, null,
       <AuthProvider>
         <AppErrorBoundary>
           <App />
@@ -35,7 +39,7 @@ createRoot(document.getElementById('root')).render(
           }}
         />
         </AppErrorBoundary>
-      </AuthProvider>
-    </BrowserRouter>
+      </AuthProvider>,
+    )}
   </StrictMode>,
 )

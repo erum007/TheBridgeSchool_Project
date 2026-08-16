@@ -38,6 +38,7 @@ class Settings:
     vapid_public_key: str = os.getenv('VAPID_PUBLIC_KEY', '')
     vapid_private_key: str = os.getenv('VAPID_PRIVATE_KEY', '')
     vapid_subject: str = os.getenv('VAPID_SUBJECT', 'mailto:admin@bridge.school')
+    firebase_service_account_json: str = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON', '')
     rate_limit_enabled: bool = os.getenv('RATE_LIMIT_ENABLED', 'true').lower() not in {'0', 'false', 'no'}
 
     @staticmethod
