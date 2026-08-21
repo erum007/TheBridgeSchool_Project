@@ -18,7 +18,10 @@ export default defineConfig(({ mode }) => {
         },
       },
     ].filter(Boolean),
-    base: './',
+    // Web routes are served by Vercel's SPA fallback, so assets must resolve
+    // from the deployment root when a nested route is refreshed. Cordova still
+    // needs relative paths because it loads the bundle from the device filesystem.
+    base: isMobile ? './' : '/',
     build: isMobile
       ? {
           outDir: '../mobile/www',
