@@ -24,8 +24,13 @@ const statusClasses = {
   teachers: 'bg-[rgba(232,115,74,0.15)] text-[var(--brand-coral)] border-[rgba(232,115,74,0.3)]',
 }
 
+const statusLabels = {
+  todo: 'To-do',
+  in_progress: 'In Progress',
+}
+
 export default function Badge({ status = 'todo', label }) {
   const key = String(status).toLowerCase()
   const classes = statusClasses[key] || 'bg-[#f0f2f8] text-[var(--text-secondary)] border-[var(--border-strong)]'
-  return <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-display text-xs font-semibold capitalize ${classes}`}>{label ?? status}</span>
+  return <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-display text-xs font-semibold capitalize ${classes}`}>{label ?? statusLabels[key] ?? status}</span>
 }

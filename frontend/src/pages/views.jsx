@@ -369,9 +369,10 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     await saveFile(document.output('blob'), `meeting-summary-${slug}-${dateForFilename}.pdf`, 'application/pdf')
   }
 
+  const actionStatusLabels = { todo: 'To-do', in_progress: 'In Progress', done: 'Done' }
   const boardColumns = ['todo', 'in_progress', 'done'].map((status) => ({
     id: status,
-    title: status.replace('_', ' ').toUpperCase(),
+    title: actionStatusLabels[status],
     items: workspaceActions.filter((item) => item.status === status).map((item) => ({
       ...item,
       assignedToName: item.assigned_to_name,
@@ -1888,6 +1889,7 @@ export function PortalManagementView() {
     <div>
       <PageHeader title="Portal Management" subtitle="Manage notices, opportunities, and users." />
       <Tabs
+        wrapOnMobile
         tabs={[
           {
             id: 'notices',

@@ -3,7 +3,7 @@ import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd'
 import Badge from './Badge.jsx'
 
 const statusOptions = [
-  { value: 'todo', label: 'To Do' },
+  { value: 'todo', label: 'To-do' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'done', label: 'Done' },
 ]
