@@ -109,7 +109,7 @@ export default function AppHeader({ onToggleSidebar, title }) {
             {unreadCount > 0 ? <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--brand-red)] px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span> : null}
           </button>
           {notificationOpen ? (
-            <div className="absolute right-0 top-11 z-50 w-80 overflow-hidden rounded-xl border border-[var(--border-default)] bg-white shadow-lg">
+            <div className="fixed inset-x-2 top-16 z-50 overflow-hidden rounded-xl border border-[var(--border-default)] bg-white shadow-lg md:absolute md:inset-x-auto md:right-0 md:top-11 md:w-80">
               <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-3">
                 <span className="text-sm font-semibold text-[var(--text-primary)]">Notifications</span>
                 {unreadCount > 0 ? <span className="rounded-full bg-[var(--brand-red-light)] px-2 py-0.5 text-xs font-medium text-[var(--brand-red)]">{unreadCount} new</span> : null}
