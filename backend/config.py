@@ -25,6 +25,7 @@ class Settings:
     access_token_expire_minutes: int = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '60'))
     app_timezone: str = os.getenv('APP_TIMEZONE', 'Asia/Karachi')
     demo_password: str = os.getenv('DEMO_PASSWORD', 'password123')
+    seed_demo_data: bool = os.getenv('SEED_DEMO_DATA', 'false').strip().lower() in {'1', 'true', 'yes'}
     gmail_client_id: str = os.getenv('GMAIL_CLIENT_ID', '')
     gmail_client_secret: str = os.getenv('GMAIL_CLIENT_SECRET', '')
     gmail_sender: str = os.getenv('GMAIL_SENDER', '')

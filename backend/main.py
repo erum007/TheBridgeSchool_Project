@@ -243,7 +243,8 @@ def on_startup() -> None:
     restore_reminders()
     db = SessionLocal()
     try:
-        _seed_demo_data(db)
+        if settings.seed_demo_data:
+            _seed_demo_data(db)
         _ensure_standard_departments(db)
         _backfill_department_memberships(db)
     finally:
