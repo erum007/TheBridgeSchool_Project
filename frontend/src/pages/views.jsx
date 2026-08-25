@@ -1672,23 +1672,29 @@ export function PortalManagementView() {
     })
   }
 
-  const submitNotice = async (event) => {
+  const submitNotice = async (event, publishMode = noticeForm.publish_mode) => {
     event.preventDefault()
-    if (!noticeForm.title.trim()) {
+    const form = {
+      ...noticeForm,
+      publish_mode: publishMode,
+      status: publishMode === 'draft' ? 'draft' : 'published',
+      publish_datetime: publishMode === 'now' ? '' : noticeForm.publish_datetime,
+    }
+    if (!form.title.trim()) {
       toast.error('Title is required.')
       return
     }
-    const hasRecipients = (noticeForm.recipient_roles?.length > 0) || (noticeForm.recipient_department_ids?.length > 0) || (noticeForm.recipient_user_ids?.length > 0)
+    const hasRecipients = (form.recipient_roles?.length > 0) || (form.recipient_department_ids?.length > 0) || (form.recipient_user_ids?.length > 0)
     if (!hasRecipients) {
       toast.error('At least one recipient is required.')
       return
     }
-    if (noticeForm.publish_mode === 'schedule' && !noticeForm.publish_datetime) {
+    if (form.publish_mode === 'schedule' && !form.publish_datetime) {
       toast.error('Please select a date and time for the scheduled notice.')
       return
     }
     try {
-      const { publish_mode, ...rest } = noticeForm
+      const { publish_mode, ...rest } = form
       await noticesApi.create({
         ...rest,
         recipient_roles: rest.recipient_roles || [],
@@ -1939,14 +1945,14 @@ export function PortalManagementView() {
                   </div>
                   <div>
                     <label className="portal-label block">When to publish</label>
-                    <div className="mt-2 flex gap-2">
-                      <button type="button" className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${noticeForm.publish_mode === 'now' ? 'border-[var(--brand-blue)] bg-[var(--brand-blue)] text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-app)]'}`} onClick={() => setNoticeForm({ ...noticeForm, publish_mode: 'now', publish_datetime: '', status: 'published' })}>
-                        Publish Now
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" className="portal-button-primary" onClick={(event) => submitNotice(event, 'now')}>
+                        Publish
                       </button>
-                      <button type="button" className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${noticeForm.publish_mode === 'schedule' ? 'border-[var(--brand-blue)] bg-[var(--brand-blue)] text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-app)]'}`} onClick={() => setNoticeForm({ ...noticeForm, publish_mode: 'schedule', publish_datetime: futureDateTimeInputValue(), status: 'published' })}>
-                        Schedule
+                      <button type="button" className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${noticeForm.publish_mode === 'schedule' ? 'border-[var(--brand-navy)] bg-[var(--brand-navy)] text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-app)]'}`} onClick={(event) => noticeForm.publish_mode === 'schedule' ? submitNotice(event, 'schedule') : setNoticeForm({ ...noticeForm, publish_mode: 'schedule', publish_datetime: futureDateTimeInputValue(), status: 'published' })}>
+                        {noticeForm.publish_mode === 'schedule' ? 'Schedule Notice' : 'Schedule'}
                       </button>
-                      <button type="button" className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${noticeForm.publish_mode === 'draft' ? 'border-[var(--brand-blue)] bg-[var(--brand-blue)] text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-app)]'}`} onClick={() => setNoticeForm({ ...noticeForm, publish_mode: 'draft', publish_datetime: '', status: 'draft' })}>
+                      <button type="button" className="rounded-full border border-[var(--border-default)] bg-white px-4 py-1.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-app)]" onClick={(event) => submitNotice(event, 'draft')}>
                         Save as Draft
                       </button>
                     </div>
@@ -1957,7 +1963,6 @@ export function PortalManagementView() {
                       </div>
                     )}
                   </div>
-                  <button type="submit" className="portal-button-primary">{noticeForm.publish_mode === 'now' ? 'Publish Notice' : noticeForm.publish_mode === 'schedule' ? 'Schedule Notice' : 'Save Draft'}</button>
                 </form>
               </div>
             ),
