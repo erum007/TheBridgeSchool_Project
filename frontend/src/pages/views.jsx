@@ -175,6 +175,10 @@ export function AdminDashboardView() {
 }
 
 export function MeetingWorkspaceView({ canCreateMeeting }) {
+  const { user } = useAuth()
+  const [editingAction, setEditingAction] = useState(null)
+  const [deletingAction, setDeletingAction] = useState(null)
+  const [actionSaving, setActionSaving] = useState(false)
   const [searchParams] = useSearchParams()
   const { data: meetings = [], loading: meetingsLoading, error: meetingsError, refetch: refetchMeetings } = useApi(() => meetingsApi.list(), [])
   const { data: actionItems = [], error: actionItemsError, refetch: refetchActions } = useApi(() => actionItemsApi.list(), [])
@@ -210,10 +214,10 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     localActionItemsRef.current = actionItems
   }, [actionItems])
   const filteredActions = useMemo(() => {
-    const visibleItems = localActionItems.length ? localActionItems : actionItems
+    const visibleItems = localActionItems
     if (assigneeFilter === 'all') return visibleItems
     return visibleItems.filter((item) => String(item.assigned_to) === String(assigneeFilter))
-  }, [actionItems, assigneeFilter, localActionItems])
+  }, [assigneeFilter, localActionItems])
   const workspaceActions = useMemo(() => {
     if (meetingFilter === 'all') return filteredActions
     if (meetingFilter === 'none') return filteredActions.filter((item) => !item.meeting_id)
@@ -376,6 +380,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
     items: workspaceActions.filter((item) => item.status === status).map((item) => ({
       ...item,
       assignedToName: item.assigned_to_name,
+      canEdit: user?.role === 'admin' || String(item.assigned_to) === String(user?.id),
       dueDate: item.due_date ? formatDate(item.due_date) : '',
     })),
   }))
@@ -403,6 +408,47 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
         delete next[actionItemId]
         return next
       })
+    }
+  }
+
+  const saveActionItem = async (event) => {
+    event.preventDefault()
+    if (actionSaving || !editingAction.description.trim()) return
+    setActionSaving(true)
+    try {
+      const original = localActionItemsRef.current.find((item) => item.id === editingAction.id)
+      const payload = { description: editingAction.description.trim(), status: editingAction.status }
+      if (String(editingAction.assigned_to) !== String(original?.assigned_to)) payload.assigned_to = Number(editingAction.assigned_to)
+      if ((editingAction.due_date || '') !== (original?.due_date || '')) payload.due_date = editingAction.due_date || ''
+      const { data } = await actionItemsApi.update(editingAction.id, payload)
+      localActionItemsRef.current = localActionItemsRef.current.map((item) => item.id === data.id ? data : item)
+      setLocalActionItems(localActionItemsRef.current)
+      setEditingAction(null)
+      refetchActions()
+      refetchMeetings()
+      toast.success('Action item updated')
+    } catch (error) {
+      toast.error(formatApiError(error, 'Could not update action item'))
+    } finally {
+      setActionSaving(false)
+    }
+  }
+
+  const deleteActionItem = async () => {
+    if (actionSaving) return
+    setActionSaving(true)
+    try {
+      await actionItemsApi.remove(deletingAction.id)
+      localActionItemsRef.current = localActionItemsRef.current.filter((item) => item.id !== deletingAction.id)
+      setLocalActionItems(localActionItemsRef.current)
+      setDeletingAction(null)
+      refetchActions()
+      refetchMeetings()
+      toast.success('Action item deleted')
+    } catch (error) {
+      toast.error(formatApiError(error, 'Could not delete action item'))
+    } finally {
+      setActionSaving(false)
     }
   }
 
@@ -560,7 +606,7 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
                   </div>
                 </div>
                 <div className="rounded-lg bg-[var(--bg-app)] px-4 py-3 text-sm text-[var(--text-secondary)]">Showing <strong className="text-[var(--text-primary)]">{workspaceActions.length}</strong> action item{workspaceActions.length === 1 ? '' : 's'}{meetingFilter !== 'all' ? ' for the selected meeting filter' : ''}.</div>
-                <KanbanBoard columns={boardColumns} onStatusChange={changeActionStatus} pendingStatusItemIds={pendingActionStatusIds} onSendReminderNow={sendReminderNow} pendingReminderIds={pendingReminderIds} cooldownReminderIds={cooldownReminderIds} />
+                <KanbanBoard columns={boardColumns} onStatusChange={changeActionStatus} pendingStatusItemIds={pendingActionStatusIds} onEdit={(item) => setEditingAction({ ...item })} onDelete={user?.role === 'admin' ? setDeletingAction : undefined} onSendReminderNow={sendReminderNow} pendingReminderIds={pendingReminderIds} cooldownReminderIds={cooldownReminderIds} />
                 {canCreateMeeting ? <form className="grid gap-4 portal-panel lg:grid-cols-4" onSubmit={createActionItem}>
                   <div className="lg:col-span-4"><div className="text-sm font-semibold text-[var(--text-primary)]">Add a linked action item</div><p className="mt-1 text-xs text-[var(--text-muted)]">Every action item belongs to a meeting, so decisions and follow-up remain connected.</p></div>
                   <select required aria-label="Meeting" className="portal-input" value={actionForm.meeting_id} onChange={(event) => setActionForm({ ...actionForm, meeting_id: event.target.value })}>
@@ -602,6 +648,24 @@ export function MeetingWorkspaceView({ canCreateMeeting }) {
           },
         ]}
       />
+      <Modal isOpen={Boolean(editingAction)} onClose={() => { if (!actionSaving) setEditingAction(null) }} title="Edit action item">
+        {editingAction ? <form onSubmit={saveActionItem} className="space-y-4">
+          <fieldset disabled={actionSaving} className="space-y-4">
+            <label className="portal-label block">Description<textarea required className="portal-input mt-1" value={editingAction.description} onChange={(event) => setEditingAction({ ...editingAction, description: event.target.value })} /></label>
+            <label className="portal-label block">Assignee<select required className="portal-input mt-1" value={editingAction.assigned_to} onChange={(event) => setEditingAction({ ...editingAction, assigned_to: event.target.value })}>
+              {!assignableUsers.some((person) => String(person.id) === String(editingAction.assigned_to)) ? <option value={editingAction.assigned_to}>{editingAction.assigned_to_name || 'Current assignee'}</option> : null}
+              {assignableUsers.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+            </select></label>
+            <label className="portal-label block">Due date<input type="date" className="portal-input mt-1" value={editingAction.due_date || ''} onChange={(event) => setEditingAction({ ...editingAction, due_date: event.target.value })} /></label>
+            <label className="portal-label block">Status<select className="portal-input mt-1" value={editingAction.status} onChange={(event) => setEditingAction({ ...editingAction, status: event.target.value })}><option value="todo">To-do</option><option value="in_progress">In Progress</option><option value="done">Done</option></select></label>
+            <div className="flex justify-end gap-2"><button type="button" className="portal-button-secondary" onClick={() => setEditingAction(null)}>Cancel</button><button type="submit" className="portal-button-primary" disabled={!editingAction.description.trim()}>{actionSaving ? 'Saving...' : 'Save changes'}</button></div>
+          </fieldset>
+        </form> : null}
+      </Modal>
+      <Modal isOpen={Boolean(deletingAction)} onClose={() => { if (!actionSaving) setDeletingAction(null) }} title="Delete action item">
+        <p className="text-sm text-[var(--text-secondary)]">Delete “{deletingAction?.description}”? This cannot be undone and will stop its reminders.</p>
+        <div className="mt-5 flex justify-end gap-2"><button type="button" className="portal-button-secondary" disabled={actionSaving} onClick={() => setDeletingAction(null)}>Cancel</button><button type="button" className="portal-button-primary" disabled={actionSaving} onClick={deleteActionItem}>{actionSaving ? 'Deleting...' : 'Delete action item'}</button></div>
+      </Modal>
       <Modal isOpen={Boolean(selectedMeeting)} onClose={() => setSelectedMeeting(null)} title={selectedMeeting?.title || 'Meeting details'} size="large">
         {selectedMeeting ? <div className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2">

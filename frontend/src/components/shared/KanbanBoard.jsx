@@ -8,7 +8,7 @@ const statusOptions = [
   { value: 'done', label: 'Done' },
 ]
 
-export default function KanbanBoard({ columns, onStatusChange, pendingStatusItemIds = {}, onSendReminderNow, pendingReminderIds = {}, cooldownReminderIds = {} }) {
+export default function KanbanBoard({ columns, onStatusChange, pendingStatusItemIds = {}, onEdit, onDelete, onSendReminderNow, pendingReminderIds = {}, cooldownReminderIds = {} }) {
   return (
     <DragDropContext
       onDragEnd={(result) => {
@@ -38,7 +38,7 @@ export default function KanbanBoard({ columns, onStatusChange, pendingStatusItem
                   <span className="rounded-full border border-[var(--border-default)] bg-white px-2 py-0.5 text-xs font-medium text-[var(--text-secondary)]">{column.items.length}</span>
                 </div>
                 {column.items.map((item, index) => (
-                  <Draggable key={String(item.id)} draggableId={String(item.id)} index={index}>
+                  <Draggable key={String(item.id)} draggableId={String(item.id)} index={index} isDragDisabled={Boolean(pendingStatusItemIds[String(item.id)])}>
                     {(draggableProvided, draggableSnapshot) => (
                       <div
                         ref={draggableProvided.innerRef}
@@ -47,6 +47,10 @@ export default function KanbanBoard({ columns, onStatusChange, pendingStatusItem
                         className={`mb-2 rounded-lg border border-[var(--border-default)] bg-white p-3 transition-all duration-150 hover:border-[rgba(27,43,107,0.2)] hover:shadow-sm ${draggableSnapshot.isDragging ? 'opacity-50' : ''}`}
                       >
                         <p className="mb-2 text-sm font-medium text-[var(--text-primary)]">{item.description}</p>
+                        <div className="mb-2 flex gap-2">
+                          {onEdit && item.canEdit ? <button type="button" className="portal-button-secondary" disabled={Boolean(pendingStatusItemIds[String(item.id)])} onClick={() => onEdit(item)} aria-label={`Edit ${item.description}`}>Edit</button> : null}
+                          {onDelete ? <button type="button" className="portal-button-secondary text-red-600" disabled={Boolean(pendingStatusItemIds[String(item.id)])} onClick={() => onDelete(item)} aria-label={`Delete ${item.description}`}>Delete</button> : null}
+                        </div>
                         <p className="mt-1 text-xs text-[var(--text-muted)]">{item.assignedToName || item.assigneeName || 'Unassigned'}</p>
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-2">

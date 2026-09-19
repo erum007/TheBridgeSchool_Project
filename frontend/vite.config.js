@@ -22,6 +22,12 @@ export default defineConfig(({ mode }) => {
     // from the deployment root when a nested route is refreshed. Cordova still
     // needs relative paths because it loads the bundle from the device filesystem.
     base: isMobile ? './' : '/',
+    server: {
+      proxy: {
+        '/api': 'http://127.0.0.1:8000',
+        '/uploads': 'http://127.0.0.1:8000',
+      },
+    },
     build: isMobile
       ? {
           outDir: '../mobile/www',
